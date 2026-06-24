@@ -19,6 +19,12 @@ appRoot.innerHTML = `
         <button class="active" data-view="surface" type="button">Поверхность</button>
         <button data-view="underground" type="button">Подземелье</button>
       </div>
+      <div class="segmented speedControls" aria-label="Скорость">
+        <button class="active" data-speed="1" type="button">1x</button>
+        <button data-speed="5" type="button">5x</button>
+        <button data-speed="20" type="button">20x</button>
+        <button data-speed="50" type="button">Max</button>
+      </div>
       <div class="segmented cameraControls" aria-label="Камера">
         <button class="active" data-camera="follow" type="button">Слежение</button>
         <button data-camera="free" type="button">Свободно</button>
@@ -223,6 +229,7 @@ document.head.appendChild(style);
 const canvasHost = document.querySelector<HTMLDivElement>("#canvas-host");
 const status = document.querySelector<HTMLElement>("#status");
 const viewButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-view]"));
+const speedButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-speed]"));
 const cameraButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-camera]"));
 const tick = document.querySelector<HTMLElement>("#tick");
 const generation = document.querySelector<HTMLElement>("#generation");
@@ -286,6 +293,7 @@ type AntInterp = {
 
 let currentView: ViewMode = "surface";
 let cameraMode: CameraMode = "follow";
+let currentSpeed = 1;
 let camera: Camera = { x: 50, y: 50, zoom: 1 };
 let latestWorld: WorldSnapshot | null = null;
 let lastRenderAt = 0;
@@ -420,6 +428,23 @@ pixi.ticker.add(() => {
 const wsHost = window.location.hostname || "localhost";
 const socket = new WebSocket(`ws://${wsHost}:8787`);
 
+function setSpeed(speed: number): void {
+  currentSpeed = speed;
+  for (const button of speedButtons) {
+    button.classList.toggle("active", Number(button.dataset.speed) === speed);
+  }
+
+  if (socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({ type: "setSpeed", value: speed }));
+  }
+}
+
+for (const button of speedButtons) {
+  button.addEventListener("click", () => {
+    setSpeed(Number(button.dataset.speed ?? 1));
+  });
+}
+
 pixi.canvas.addEventListener("pointerdown", (event) => {
   pointerDown = true;
   isDragging = false;
@@ -497,6 +522,7 @@ pixi.canvas.addEventListener("wheel", (event) => {
 
 socket.addEventListener("open", () => {
   statusNode.textContent = "Подключено";
+  setSpeed(currentSpeed);
 });
 
 socket.addEventListener("close", () => {

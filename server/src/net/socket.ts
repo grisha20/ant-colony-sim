@@ -2,11 +2,16 @@ import { WebSocket, WebSocketServer } from "ws";
 import type { WorldSnapshot } from "../../../shared/types";
 import { CONFIG } from "../config";
 
-export type ClientCommand = {
-  type: "dropFood";
-  x: number;
-  y: number;
-};
+export type ClientCommand =
+  | {
+      type: "dropFood";
+      x: number;
+      y: number;
+    }
+  | {
+      type: "setSpeed";
+      value: number;
+    };
 
 export type SocketHub = {
   broadcast(snapshot: WorldSnapshot): void;
@@ -21,26 +26,33 @@ function parseCommand(raw: string): ClientCommand | null {
     }
 
     const command = value as Record<string, unknown>;
-    if (command.type !== "dropFood" || typeof command.x !== "number" || typeof command.y !== "number") {
-      return null;
+    if (command.type === "setSpeed" && typeof command.value === "number" && Number.isFinite(command.value)) {
+      return {
+        type: "setSpeed",
+        value: command.value
+      };
     }
 
-    if (
-      !Number.isFinite(command.x) ||
-      !Number.isFinite(command.y) ||
-      command.x < 0 ||
-      command.y < 0 ||
-      command.x >= CONFIG.mapWidth ||
-      command.y >= CONFIG.mapHeight
-    ) {
-      return null;
+    if (command.type === "dropFood" && typeof command.x === "number" && typeof command.y === "number") {
+      if (
+        !Number.isFinite(command.x) ||
+        !Number.isFinite(command.y) ||
+        command.x < 0 ||
+        command.y < 0 ||
+        command.x >= CONFIG.mapWidth ||
+        command.y >= CONFIG.mapHeight
+      ) {
+        return null;
+      }
+
+      return {
+        type: "dropFood",
+        x: command.x,
+        y: command.y
+      };
     }
 
-    return {
-      type: "dropFood",
-      x: command.x,
-      y: command.y
-    };
+    return null;
   } catch {
     return null;
   }
