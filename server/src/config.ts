@@ -147,7 +147,7 @@ export const CONFIG = {
   spiderCarryAmount: 45,
   spiderHoardMax: 90,
   spiderHoardEatPerTick: 10,
-  spiderMobRetreatCount: 2,
+  spiderMobRetreatCount: 6,
   spiderMobRetreatUtility: 2.4,
   spiderLowHpRetreatThreshold: 0.65,
   spiderLowHpRetreatUtility: 1.3,
