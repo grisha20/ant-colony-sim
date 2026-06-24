@@ -2,6 +2,10 @@ import { CONFIG } from "../config";
 import { makeBrood } from "./underground";
 import { createWorkerAnt, type World } from "./world";
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
 function hasNearbyFeeder(world: World, broodId: string): boolean {
   const brood = world.underground.brood.find((item) => item.id === broodId);
   if (!brood) {
@@ -25,6 +29,11 @@ export function updateBrood(world: World): void {
       continue;
     }
 
+    if (brood.stage === "egg" && brood.location === "queen") {
+      brood.progress += 1;
+      continue;
+    }
+
     if (brood.stage === "egg" && brood.location === "nursery") {
       brood.progress += 1;
       if (brood.progress >= CONFIG.eggIncubationTicks) {
@@ -45,7 +54,16 @@ export function updateBrood(world: World): void {
       world.underground.foodStorage -= CONFIG.larvaFeedFoodCost;
       brood.progress += CONFIG.larvaFeedPerTick;
 
-      if (brood.progress >= CONFIG.larvaGrowthNeeded && world.ants.length < world.colony.nestCapacity) {
+      const growthNeeded = CONFIG.larvaGrowthNeeded * (brood.isPrincess ? CONFIG.princessGrowthMult : 1);
+      if (brood.progress >= growthNeeded && brood.isPrincess) {
+        if (world.underground.princesses.length < CONFIG.maxPrincesses) {
+          world.underground.princesses.push({
+            id: `${brood.id}-princess`,
+            pos: { ...world.underground.nursery }
+          });
+        }
+        matureBroodIds.add(brood.id);
+      } else if (brood.progress >= growthNeeded && world.ants.length < world.colony.nestCapacity) {
         const worker = createWorkerAnt(world.underground.nursery, "underground");
         worker.energy = CONFIG.maxEnergy;
         world.ants.push(worker);
@@ -71,6 +89,38 @@ export function updateQueen(world: World): void {
     return;
   }
 
+  underground.queen.age += 1;
+  if (underground.queen.age >= CONFIG.queenMaxAge) {
+    underground.queen.alive = false;
+    return;
+  }
+
+  const hasDirtyEggs = underground.brood.some(
+    (brood) =>
+      brood.stage === "egg" &&
+      brood.location === "queen" &&
+      brood.progress >= CONFIG.queenStressDirtyEggTicks &&
+      Math.hypot(brood.pos.x - underground.queenChamber.x, brood.pos.y - underground.queenChamber.y) <= CONFIG.undergroundNodeRadius * 2
+  );
+  underground.queen.stress = clamp(
+    underground.queen.stress + (hasDirtyEggs ? CONFIG.queenStressPerTick : -CONFIG.queenStressReliefPerTick),
+    0,
+    100
+  );
+
+  if (underground.queen.stress > 70) {
+    underground.queen.hp -= CONFIG.queenStressDamage;
+    if (underground.queen.hp <= 0) {
+      underground.queen.alive = false;
+      return;
+    }
+  }
+
+  if (underground.queen.stress > 90 && Math.random() < CONFIG.queenHighStressDeathChance) {
+    underground.queen.alive = false;
+    return;
+  }
+
   if (world.tick % CONFIG.queenEatEveryTicks === 0) {
     if (underground.foodStorage >= CONFIG.queenFoodPerMeal) {
       underground.foodStorage -= CONFIG.queenFoodPerMeal;
@@ -92,7 +142,9 @@ export function updateQueen(world: World): void {
     totalPopulation < colony.nestCapacity
   ) {
     underground.foodStorage -= CONFIG.eggCost;
-    underground.brood.push(makeBrood("egg", "queen", underground.queenChamber));
+    const layIndex = Math.floor(underground.queen.age / CONFIG.broodLayCooldownTicks);
+    const isPrincess = (layIndex > 0 && layIndex % 15 === 0) || Math.random() < CONFIG.princessChance;
+    underground.brood.push(makeBrood("egg", "queen", underground.queenChamber, 0, isPrincess));
     underground.queen.layCooldown = CONFIG.broodLayCooldownTicks;
   }
 }

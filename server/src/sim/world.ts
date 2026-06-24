@@ -165,6 +165,9 @@ export function createWorld(genomeState: GenomeState, spiderGenomeState: SpiderG
     underground.brood.filter((brood) => brood.stage === "larva").length,
     underground.foodStorage,
     underground.queen.alive,
+    underground.queen.stress,
+    underground.queen.age,
+    underground.princesses.length,
     genomeState.bestFitness,
     spiderGenomeState.current.generation,
     genomeState.generationsRun,
@@ -238,6 +241,9 @@ export function worldFromSnapshot(
     },
     colony: {
       ...snapshot.colony,
+      queenStress: underground.queen.stress,
+      queenAge: underground.queen.age,
+      princesses: underground.princesses.length,
       generation: genomeState.current.generation,
       generationsRun: genomeState.generationsRun,
       bestFitness: genomeState.bestFitness,
@@ -307,12 +313,16 @@ function normalizeUndergroundSnapshot(
     queen: {
       ...underground.queen,
       starve: underground.queen.starve ?? 0,
-      layCooldown: underground.queen.layCooldown ?? CONFIG.broodLayCooldownTicks
+      layCooldown: underground.queen.layCooldown ?? CONFIG.broodLayCooldownTicks,
+      stress: underground.queen.stress ?? 0,
+      hp: underground.queen.hp ?? CONFIG.queenMaxHp,
+      age: underground.queen.age ?? 0
     },
     brood:
       underground.brood?.map((brood) => ({
         ...brood,
-        location: brood.location === "queen" ? "queen" : "nursery"
+        location: brood.location === "queen" ? "queen" : "nursery",
+        isPrincess: brood.isPrincess ?? false
       })) ??
       (underground.eggs ?? []).map(
         (egg): Brood => ({
@@ -320,7 +330,8 @@ function normalizeUndergroundSnapshot(
           stage: "egg",
           location: "nursery",
           pos: egg.pos,
-          progress: egg.maturity
+          progress: egg.maturity,
+          isPrincess: false
         })
       ),
     entrance: underground.entrance ?? CONFIG.undergroundEntrance,
@@ -329,7 +340,8 @@ function normalizeUndergroundSnapshot(
     nursery,
     storage: underground.storage ?? CONFIG.storagePos,
     barracksA: underground.barracksA ?? CONFIG.barracksAPos,
-    barracksB: underground.barracksB ?? CONFIG.barracksBPos
+    barracksB: underground.barracksB ?? CONFIG.barracksBPos,
+    princesses: underground.princesses ?? []
   };
 
   return normalized;

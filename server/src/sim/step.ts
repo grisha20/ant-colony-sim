@@ -1,5 +1,5 @@
 import { CONFIG } from "../config";
-import { computeDirectives, updateFitness } from "../ai/controller";
+import { computeDirectives, createFitnessState, updateFitness } from "../ai/controller";
 import { recordAndEvolve, saveGenome } from "../ai/genome";
 import { stepAnt } from "./ant";
 import { updateBrood, updateQueen } from "./brood";
@@ -29,20 +29,47 @@ function removeDeadAndSyncLayerLists(world: World): void {
   world.underground.ants = world.ants.filter((ant) => ant.layer === "underground").map((ant) => ant.id);
 }
 
-function shouldFinishGeneration(world: World): boolean {
-  return !world.underground.queen.alive || world.fitness.survivalTicks >= CONFIG.generationMaxTicks;
-}
-
-function evolveAndRestartIfDead(world: World): boolean {
-  if (!shouldFinishGeneration(world) || world.fitness.survivalTicks < CONFIG.colonyDeathMinTicks) {
-    return false;
-  }
-
+function recordReignAndEvolve(world: World): void {
   world.genomeState.generationsRun += 1;
   recordAndEvolve(world.genomeState, world.genomeState.current, world.fitness.score);
   saveGenome(world.genomeState).catch((error: unknown) => {
     console.warn(`Could not save genome: ${(error as Error).message}`);
   });
+  world.colony.generation = world.genomeState.current.generation;
+  world.colony.generationsRun = world.genomeState.generationsRun;
+  world.colony.bestFitness = world.genomeState.bestFitness;
+}
+
+function promotePrincess(world: World): boolean {
+  const princess = world.underground.princesses.shift();
+  if (!princess) {
+    return false;
+  }
+
+  world.underground.queen = {
+    pos: { ...world.underground.queenChamber },
+    alive: true,
+    layCooldown: CONFIG.broodLayCooldownTicks,
+    starve: 0,
+    stress: 0,
+    hp: CONFIG.queenMaxHp,
+    age: 0
+  };
+  world.fitness = createFitnessState();
+  world.directives = computeDirectives(world, world.genomeState.current);
+  return true;
+}
+
+function evolveAfterQueenDeath(world: World): boolean {
+  if (world.underground.queen.alive) {
+    return false;
+  }
+
+  recordReignAndEvolve(world);
+  if (promotePrincess(world)) {
+    return false;
+  }
+
   restartColony(world);
   return true;
 }
@@ -64,7 +91,7 @@ export function step(world: World): void {
   removeDeadAndSyncLayerLists(world);
   updateFitness(world);
 
-  if (evolveAndRestartIfDead(world)) {
+  if (evolveAfterQueenDeath(world)) {
     return;
   }
 
@@ -78,6 +105,9 @@ export function step(world: World): void {
     world.underground.brood.filter((brood) => brood.stage === "larva").length,
     world.underground.foodStorage,
     world.underground.queen.alive,
+    world.underground.queen.stress,
+    world.underground.queen.age,
+    world.underground.princesses.length,
     world.genomeState.bestFitness,
     world.spiderGenomeState.current.generation,
     world.genomeState.generationsRun,

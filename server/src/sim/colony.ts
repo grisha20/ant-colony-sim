@@ -17,6 +17,9 @@ export function createColony(
       larvae: CONFIG.startingLarvae
     },
     queenAlive: true,
+    queenStress: 0,
+    queenAge: 0,
+    princesses: 0,
     nestCapacity: CONFIG.nestCapacity,
     detailLevel: "full",
     generation,
@@ -34,6 +37,9 @@ export function syncColonyStats(
   larvaCount: number,
   foodStorage: number,
   queenAlive: boolean,
+  queenStress: number,
+  queenAge: number,
+  princessCount: number,
   bestFitness: number,
   spiderGeneration: number,
   generationsRun: number,
@@ -44,6 +50,9 @@ export function syncColonyStats(
   colony.population.eggs = eggCount;
   colony.population.larvae = larvaCount;
   colony.queenAlive = queenAlive;
+  colony.queenStress = queenStress;
+  colony.queenAge = queenAge;
+  colony.princesses = princessCount;
   colony.bestFitness = bestFitness;
   colony.spiderGeneration = spiderGeneration;
   colony.generationsRun = generationsRun;

@@ -25,6 +25,7 @@ export type Brood = {
   pos: Vec2;
   carriedBy?: string;
   progress: number;
+  isPrincess: boolean;
 };
 
 export type Ant = {
@@ -45,6 +46,14 @@ export type Queen = {
   alive: boolean;
   layCooldown: number;
   starve: number;
+  stress: number;
+  hp: number;
+  age: number;
+};
+
+export type Princess = {
+  id: string;
+  pos: Vec2;
 };
 
 export type Underground = {
@@ -60,6 +69,7 @@ export type Underground = {
   storage: Vec2;
   barracksA: Vec2;
   barracksB: Vec2;
+  princesses: Princess[];
   ants: string[];
 };
 
@@ -72,6 +82,9 @@ export type Colony = {
     larvae: number;
   };
   queenAlive: boolean;
+  queenStress: number;
+  queenAge: number;
+  princesses: number;
   nestCapacity: number;
   detailLevel: DetailLevel;
   generation: number;

@@ -82,6 +82,16 @@ export const CONFIG = {
   // Queen and brood lifecycle.
   eggCost: 3,
   queenMinFoodReserve: 20,
+  queenMaxHp: 100,
+  queenStressPerTick: 0.5,
+  queenStressDamage: 0.3,
+  queenStressDirtyEggTicks: 50,
+  queenStressReliefPerTick: 2,
+  queenHighStressDeathChance: 0.01,
+  queenMaxAge: 8000,
+  princessGrowthMult: 3,
+  princessChance: 0.05,
+  maxPrincesses: 3,
   // How often the queen tries to lay a new egg under herself.
   broodLayCooldownTicks: 95,
   // Eggs only incubate after nurses carry them to the nursery.

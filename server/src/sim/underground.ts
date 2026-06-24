@@ -10,7 +10,13 @@ function withJitter(pos: Vec2, radius = 3): Vec2 {
   };
 }
 
-export function makeBrood(stage: Brood["stage"], location: Brood["location"], pos: Vec2, progress = 0): Brood {
+export function makeBrood(
+  stage: Brood["stage"],
+  location: Brood["location"],
+  pos: Vec2,
+  progress = 0,
+  isPrincess = false
+): Brood {
   const id = `brood-${nextBroodId}`;
   nextBroodId += 1;
 
@@ -19,7 +25,8 @@ export function makeBrood(stage: Brood["stage"], location: Brood["location"], po
     stage,
     location,
     pos: withJitter(pos),
-    progress
+    progress,
+    isPrincess
   };
 }
 
@@ -50,7 +57,10 @@ export function createUnderground(): Underground {
       pos: queenChamber,
       alive: true,
       layCooldown: CONFIG.broodLayCooldownTicks,
-      starve: 0
+      starve: 0,
+      stress: 0,
+      hp: CONFIG.queenMaxHp,
+      age: 0
     },
     brood,
     foodStorage: CONFIG.startingFoodStorage,
@@ -61,6 +71,7 @@ export function createUnderground(): Underground {
     storage,
     barracksA,
     barracksB,
+    princesses: [],
     ants: []
   };
 }

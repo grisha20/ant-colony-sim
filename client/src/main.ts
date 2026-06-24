@@ -43,6 +43,9 @@ appRoot.innerHTML = `
       <div><span>Яйца</span><strong id="eggs">0</strong></div>
       <div><span>Личинки</span><strong id="larvae">0</strong></div>
       <div><span>Матка</span><strong id="queen">жива</strong></div>
+      <div><span>Стресс матки</span><strong id="queen-stress">0</strong></div>
+      <div><span>Возраст матки</span><strong id="queen-age">0</strong></div>
+      <div><span>Принцессы</span><strong id="princesses">0</strong></div>
     </aside>
     <footer class="panel status">
       <span id="status">Подключение к ws://localhost:8787</span>
@@ -242,6 +245,9 @@ const workers = document.querySelector<HTMLElement>("#workers");
 const eggs = document.querySelector<HTMLElement>("#eggs");
 const larvae = document.querySelector<HTMLElement>("#larvae");
 const queen = document.querySelector<HTMLElement>("#queen");
+const queenStress = document.querySelector<HTMLElement>("#queen-stress");
+const queenAge = document.querySelector<HTMLElement>("#queen-age");
+const princesses = document.querySelector<HTMLElement>("#princesses");
 
 if (
   !canvasHost ||
@@ -256,7 +262,10 @@ if (
   !workers ||
   !eggs ||
   !larvae ||
-  !queen
+  !queen ||
+  !queenStress ||
+  !queenAge ||
+  !princesses
 ) {
   throw new Error("Missing UI nodes");
 }
@@ -274,6 +283,9 @@ const workersNode = workers;
 const eggsNode = eggs;
 const larvaeNode = larvae;
 const queenNode = queen;
+const queenStressNode = queenStress;
+const queenAgeNode = queenAge;
+const princessesNode = princesses;
 
 const SURFACE_TILE_SIZE = 8;
 const MIN_ZOOM = 0.45;
@@ -361,6 +373,9 @@ function updateHud(world: WorldSnapshot): void {
   eggsNode.textContent = String(world.colony.population.eggs);
   larvaeNode.textContent = String(world.colony.population.larvae ?? 0);
   queenNode.textContent = world.colony.queenAlive ? "жива" : "погибла";
+  queenStressNode.textContent = String(Math.round(world.colony.queenStress ?? 0));
+  queenAgeNode.textContent = String(Math.floor(world.colony.queenAge ?? 0));
+  princessesNode.textContent = String(world.colony.princesses ?? 0);
 }
 
 function draw(interpT: number): void {
