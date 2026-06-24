@@ -30,11 +30,34 @@ export class PheromoneGrid {
     this.values[index] = Math.min(255, this.values[index] + amount);
   }
 
+  getInterpolated(x: number, y: number): number {
+    const x0 = Math.floor(x);
+    const y0 = Math.floor(y);
+
+    const cx0 = Math.max(0, Math.min(this.width - 1, x0));
+    const cy0 = Math.max(0, Math.min(this.height - 1, y0));
+    const cx1 = Math.max(0, Math.min(this.width - 1, x0 + 1));
+    const cy1 = Math.max(0, Math.min(this.height - 1, y0 + 1));
+
+    const tx = x - x0;
+    const ty = y - y0;
+
+    const val00 = this.values[cy0 * this.width + cx0];
+    const val10 = this.values[cy0 * this.width + cx1];
+    const val01 = this.values[cy1 * this.width + cx0];
+    const val11 = this.values[cy1 * this.width + cx1];
+
+    const val0 = val00 * (1 - tx) + val10 * tx;
+    const val1 = val01 * (1 - tx) + val11 * tx;
+
+    return val0 * (1 - ty) + val1 * ty;
+  }
+
   sampleGradient(x: number, y: number): { x: number; y: number; strength: number } {
-    const left = this.get(x - 1, y);
-    const right = this.get(x + 1, y);
-    const up = this.get(x, y - 1);
-    const down = this.get(x, y + 1);
+    const left = this.getInterpolated(x - 1, y);
+    const right = this.getInterpolated(x + 1, y);
+    const up = this.getInterpolated(x, y - 1);
+    const down = this.getInterpolated(x, y + 1);
     const gx = right - left;
     const gy = down - up;
     const strength = Math.hypot(gx, gy);

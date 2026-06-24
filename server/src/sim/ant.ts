@@ -64,6 +64,8 @@ function moveSurfaceToward(world: World, ant: Ant, target: Vec2, avoidSpiders: b
     direction = applySpiderAvoidance(world, ant.pos, direction, speed);
   }
 
+  direction = applySeparation(world, ant, direction);
+
   ant.heading = direction;
   ant.pos.x += direction.x * speed;
   ant.pos.y += direction.y * speed;
@@ -72,8 +74,18 @@ function moveSurfaceToward(world: World, ant: Ant, target: Vec2, avoidSpiders: b
 
 function clampToSurface(ant: Ant, world: World): void {
   const margin = 1.5;
+  const oldX = ant.pos.x;
+  const oldY = ant.pos.y;
+
   ant.pos.x = Math.max(margin, Math.min(world.surface.width - margin, ant.pos.x));
   ant.pos.y = Math.max(margin, Math.min(world.surface.height - margin, ant.pos.y));
+
+  if (ant.pos.x !== oldX) {
+    ant.heading.x = -ant.heading.x;
+  }
+  if (ant.pos.y !== oldY) {
+    ant.heading.y = -ant.heading.y;
+  }
 }
 
 function clampToUnderground(ant: Ant, world: World): void {
@@ -335,7 +347,10 @@ function retreatFromSpiderToEntrance(world: World, ant: Ant, spiderPos: Vec2): v
   const speed = surfaceMoveSpeed(world, ant);
   const away = normalize({ x: ant.pos.x - spiderPos.x, y: ant.pos.y - spiderPos.y });
   const home = normalize({ x: world.surface.entrance.x - ant.pos.x, y: world.surface.entrance.y - ant.pos.y });
-  const direction = normalize({ x: away.x * 1.4 + home.x, y: away.y * 1.4 + home.y });
+  let direction = normalize({ x: away.x * 1.4 + home.x, y: away.y * 1.4 + home.y });
+
+  direction = applySeparation(world, ant, direction);
+
   ant.state = "search";
   ant.heading = direction;
   ant.pos.x += direction.x * speed;
@@ -369,6 +384,40 @@ function applySpiderAvoidance(world: World, pos: Vec2, desired: Vec2, speed: num
   return normalize({
     x: desired.x + away.x * (1.8 + strength * 2.6),
     y: desired.y + away.y * (1.8 + strength * 2.6)
+  });
+}
+
+function applySeparation(world: World, ant: Ant, desired: Vec2): Vec2 {
+  let separationX = 0;
+  let separationY = 0;
+  let count = 0;
+
+  const separationRadius = 1.8;
+
+  for (const other of world.ants) {
+    if (other.id === ant.id || other.layer !== "surface" || other.state === "dead") {
+      continue;
+    }
+
+    const dist = distance(ant.pos, other.pos);
+    if (dist < separationRadius && dist > 0.01) {
+      const force = (separationRadius - dist) / separationRadius;
+      separationX += ((ant.pos.x - other.pos.x) / dist) * force;
+      separationY += ((ant.pos.y - other.pos.y) / dist) * force;
+      count += 1;
+    }
+  }
+
+  if (count === 0) {
+    return desired;
+  }
+
+  const separationWeight = 0.45;
+  const repel = normalize({ x: separationX, y: separationY });
+
+  return normalize({
+    x: desired.x * (1 - separationWeight) + repel.x * separationWeight,
+    y: desired.y * (1 - separationWeight) + repel.y * separationWeight
   });
 }
 
@@ -533,7 +582,6 @@ function moveHungryHome(world: World, ant: Ant): void {
   moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world));
   tryCrossLayer(world, ant);
 }
-
 function moveSearching(world: World, ant: Ant): void {
   const speed = surfaceMoveSpeed(world, ant);
   const foodIndex = nearestAvailableFood(world, ant);
@@ -549,7 +597,18 @@ function moveSearching(world: World, ant: Ant): void {
 
   world.pheromones.home.add(ant.pos.x, ant.pos.y, CONFIG.homePheromoneDeposit);
 
-  const gradient = world.pheromones.food.sampleGradient(ant.pos.x, ant.pos.y);
+  // Проверяем, есть ли вообще еда на карте
+  const foodAvailable = world.surface.foodSources.some((source) => source.amount > 0);
+
+  // Если еды нет, градиент феромонов еды не учитываем (чистая разведка)
+  const gradient = foodAvailable
+    ? world.pheromones.food.sampleGradient(ant.pos.x, ant.pos.y)
+    : { x: 0, y: 0, strength: 0 };
+
+  const density = foodAvailable
+    ? world.pheromones.food.getInterpolated(ant.pos.x, ant.pos.y)
+    : 0;
+
   const jitter = randomHeading();
   const gradientPower = Math.min(2.5, gradient.strength) * CONFIG.pheromoneGradientWeight;
   const nearestFood = foodIndex >= 0 ? world.surface.foodSources[foodIndex] : null;
@@ -558,16 +617,22 @@ function moveSearching(world: World, ant: Ant): void {
     nearestFood && nearestFoodDistance <= CONFIG.antFoodSightRadius
       ? normalize({ x: nearestFood.pos.x - ant.pos.x, y: nearestFood.pos.y - ant.pos.y })
       : null;
-  const wanderWeight = directFood ? world.directives.forageWander * 0.35 : world.directives.forageWander;
+
+  // Если не видим еду напрямую, но стоим на сильном феромоне — увеличиваем блуждание (локальный поиск)
+  const wanderWeight = directFood
+    ? world.directives.forageWander * 0.35
+    : world.directives.forageWander * (1.0 + Math.min(3.0, density / 4.0));
+
   const direction = normalize({
     x: ant.heading.x * 0.35 + gradient.x * gradientPower + (directFood?.x ?? 0) * 1.4 + jitter.x * wanderWeight,
     y: ant.heading.y * 0.35 + gradient.y * gradientPower + (directFood?.y ?? 0) * 1.4 + jitter.y * wanderWeight
   });
   const safeDirection = isColonyStarving(world) ? direction : applySpiderAvoidance(world, ant.pos, direction, speed);
 
-  ant.heading = safeDirection;
-  ant.pos.x += safeDirection.x * speed;
-  ant.pos.y += safeDirection.y * speed;
+  const finalDirection = applySeparation(world, ant, safeDirection);
+  ant.heading = finalDirection;
+  ant.pos.x += finalDirection.x * speed;
+  ant.pos.y += finalDirection.y * speed;
   clampToSurface(ant, world);
 }
 
