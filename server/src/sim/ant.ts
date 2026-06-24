@@ -710,7 +710,6 @@ function moveCarryingDirt(world: World, ant: Ant): boolean {
   ant.job = "carryDirt";
   ant.carryingDirt = true;
   if (distance(ant.pos, world.underground.entrance) <= CONFIG.undergroundNodeRadius) {
-    world.underground.dirtMound += CONFIG.dirtPerDugTile;
     clearDigAssignment(ant);
     ant.state = "idle";
     ant.job = "idle";

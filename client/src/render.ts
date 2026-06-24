@@ -23,8 +23,8 @@ export type Camera = {
 };
 
 const SURFACE_TILE_SIZE = 8;
-const UNDERGROUND_WIDTH = 780;
-const UNDERGROUND_HEIGHT = 540;
+const UNDERGROUND_WIDTH = 1180;
+const UNDERGROUND_HEIGHT = 860;
 const SHOW_UNDERGROUND_DEBUG = false;
 
 const undergroundLayout = {
@@ -630,7 +630,7 @@ function rebuildUndergroundStatic(scene: UndergroundScene, world: WorldSnapshot,
 
 function drawUndergroundEarth(root: Container): void {
   const earth = new Graphics();
-  earth.rect(0, 0, UNDERGROUND_WIDTH, UNDERGROUND_HEIGHT).fill(0x7f5738);
+  earth.rect(0, 0, UNDERGROUND_WIDTH, UNDERGROUND_HEIGHT).fill(0x5a3a1a);
   earth.rect(0, 0, UNDERGROUND_WIDTH, undergroundLayout.surfaceY).fill(0x9fb86b);
   earth.rect(0, undergroundLayout.surfaceY - 16, UNDERGROUND_WIDTH, 16).fill(0x5f422b);
 
@@ -640,9 +640,9 @@ function drawUndergroundEarth(root: Container): void {
       if (y < undergroundLayout.surfaceY - 16) {
         earth.rect(x, y, 8, 8).fill(noise < 4 ? 0x8faa59 : 0xa8bf75);
       } else if (noise < 2) {
-        earth.rect(x, y, 8, 8).fill(0x6f4a30);
+        earth.rect(x, y, 8, 8).fill(0x4e3117);
       } else if (noise > 8) {
-        earth.rect(x, y, 8, 8).fill(0x8d6441);
+        earth.rect(x, y, 8, 8).fill(0x64411e);
       }
     }
   }
@@ -659,22 +659,23 @@ function drawUndergroundGrid(root: Container, world: WorldSnapshot): void {
     const row = world.underground.grid[y];
     for (let x = 0; x < row.length; x += 1) {
       const tile = row[x];
-      if (tile.type === "soil" && !tile.digProgress) {
-        continue;
-      }
-
       const screenX = metrics.x + x * metrics.cellWidth;
       const screenY = metrics.y + y * metrics.cellHeight;
+      const width = Math.ceil(metrics.cellWidth);
+      const height = Math.ceil(metrics.cellHeight);
       if (tile.type === "soil") {
-        grid.rect(screenX, screenY, Math.ceil(metrics.cellWidth), Math.ceil(metrics.cellHeight)).fill({
-          color: 0x9b7048,
-          alpha: 0.22 + Math.min(0.34, (tile.digProgress ?? 0) / 20)
+        grid.rect(screenX, screenY, width, height).fill({
+          color: tile.digProgress ? 0x6f4a30 : 0x5a3a1a,
+          alpha: tile.digProgress ? 0.62 + Math.min(0.28, (tile.digProgress ?? 0) / 24) : 0.76
         });
       } else if (tile.type === "entrance") {
-        grid.rect(screenX, screenY, Math.ceil(metrics.cellWidth), Math.ceil(metrics.cellHeight)).fill(0x2d1b12);
+        grid.rect(screenX, screenY, width, height).fill(0x1b1009);
       } else {
-        const color = tile.type === "chamber" ? 0xbf8b61 : 0xb47b50;
-        grid.rect(screenX, screenY, Math.ceil(metrics.cellWidth), Math.ceil(metrics.cellHeight)).fill(color);
+        const color = tile.type === "chamber" ? 0xa08030 : 0x8b6914;
+        grid.rect(screenX, screenY, width, height).fill(color);
+        if (tile.type === "chamber") {
+          grid.rect(screenX, screenY, width, height).stroke({ width: 1, color: 0x5b4317, alpha: 0.4 });
+        }
       }
     }
   }

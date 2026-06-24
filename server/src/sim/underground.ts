@@ -116,17 +116,29 @@ function lineTiles(from: Vec2, to: Vec2): Vec2[] {
   return tiles;
 }
 
+function edgeRoughness(x: number, y: number): number {
+  return (x * 17 + y * 31) % 11;
+}
+
 function organicTunnelTiles(points: Vec2[]): Vec2[] {
   const tiles: Vec2[] = [];
+  const halfWidth = Math.floor(CONFIG.tunnelWidth / 2);
   for (let index = 0; index < points.length - 1; index += 1) {
+    const from = tilePos(points[index]);
+    const to = tilePos(points[index + 1]);
+    const horizontal = Math.abs(to.x - from.x) >= Math.abs(to.y - from.y);
     const segment = lineTiles(points[index], points[index + 1]);
     for (const tile of segment) {
-      tiles.push(tile);
-      if ((tile.x * 7 + tile.y * 13) % 9 === 0) {
-        tiles.push({ x: tile.x + 1, y: tile.y });
+      for (let offset = -halfWidth; offset <= halfWidth; offset += 1) {
+        tiles.push(horizontal ? { x: tile.x, y: tile.y + offset } : { x: tile.x + offset, y: tile.y });
       }
-      if ((tile.x * 11 + tile.y * 5) % 13 === 0) {
-        tiles.push({ x: tile.x - 1, y: tile.y });
+
+      if (edgeRoughness(tile.x, tile.y) > 8) {
+        const roughOffset = halfWidth + 1;
+        tiles.push(horizontal ? { x: tile.x, y: tile.y + roughOffset } : { x: tile.x + roughOffset, y: tile.y });
+      } else if (edgeRoughness(tile.x, tile.y) < 2) {
+        const roughOffset = -(halfWidth + 1);
+        tiles.push(horizontal ? { x: tile.x, y: tile.y + roughOffset } : { x: tile.x + roughOffset, y: tile.y });
       }
     }
   }
@@ -189,6 +201,20 @@ function createNurseryRoom(): UndergroundRoom {
   };
 }
 
+function createEggRoom(): UndergroundRoom {
+  const bounds = roomBounds(CONFIG.eggRoomPos, CONFIG.plannedEggRoomWidth, CONFIG.plannedEggRoomHeight);
+  return {
+    id: "room-egg",
+    type: "egg",
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    capacity: CONFIG.plannedEggRoomCapacity,
+    used: 0
+  };
+}
+
 function createDiggableLayer(): Pick<Underground, "grid" | "rooms" | "digTasks" | "dirtMound"> {
   const grid = makeSoilGrid(CONFIG.undergroundWidth, CONFIG.undergroundHeight);
   const queenRoom = createQueenRoom();
@@ -196,15 +222,15 @@ function createDiggableLayer(): Pick<Underground, "grid" | "rooms" | "digTasks" 
 
   const startingTunnel = organicTunnelTiles([
     CONFIG.undergroundEntrance,
-    { x: CONFIG.undergroundEntrance.x - 1, y: 16 },
+    { x: CONFIG.undergroundEntrance.x - 1, y: 18 },
     { x: CONFIG.undergroundJunction.x + 2, y: CONFIG.undergroundJunction.y },
-    { x: 38, y: 45 },
+    { x: 58, y: 56 },
     CONFIG.queenPos
   ]);
   for (const tile of startingTunnel) {
     setTile(grid, tile.x, tile.y, "tunnel");
   }
-  for (const tile of organicTunnelTiles([{ x: 38, y: 45 }, CONFIG.storagePos])) {
+  for (const tile of organicTunnelTiles([{ x: 58, y: 56 }, CONFIG.storagePos])) {
     setTile(grid, tile.x, tile.y, "tunnel");
   }
   setTile(grid, Math.round(CONFIG.undergroundEntrance.x), Math.round(CONFIG.undergroundEntrance.y), "entrance");
@@ -228,8 +254,8 @@ function storageTargetTiles(): Vec2[] {
   const tunnelEnd = { x: room.x - 2, y: Math.round(CONFIG.storagePos.y) };
   return uniqueTiles([
     ...organicTunnelTiles([
-      { x: 38, y: 45 },
-      { x: 40, y: 48 },
+      { x: 58, y: 56 },
+      { x: 58, y: 61 },
       tunnelEnd
     ]),
     ...ovalTiles(room.x, room.y, room.width, room.height)
@@ -265,8 +291,8 @@ function nurseryTargetTiles(): Vec2[] {
   return uniqueTiles([
     ...organicTunnelTiles([
       CONFIG.storagePos,
-      { x: 48, y: 49 },
-      { x: 53, y: 51 },
+      { x: 68, y: 66 },
+      { x: 76, y: 72 },
       CONFIG.nurseryPos
     ]),
     ...ovalTiles(room.x, room.y, room.width, room.height)
@@ -279,6 +305,26 @@ function makeNurseryDigTask(underground: Underground): DigTask {
     id: `dig-nursery-${underground.digTasks.length + 1}`,
     type: "digRoom",
     roomType: "nursery",
+    targetTiles: targets,
+    completedTiles: targets.filter((tile) => underground.grid[tile.y]?.[tile.x]?.type !== "soil").length,
+    status: "planned"
+  };
+}
+
+function eggRoomTargetTiles(): Vec2[] {
+  const room = createEggRoom();
+  return uniqueTiles([
+    ...organicTunnelTiles([CONFIG.queenPos, { x: 42, y: 77 }, CONFIG.eggRoomPos]),
+    ...ovalTiles(room.x, room.y, room.width, room.height)
+  ]);
+}
+
+function makeEggRoomDigTask(underground: Underground): DigTask {
+  const targets = eggRoomTargetTiles().filter((tile) => inBounds(underground.grid, tile.x, tile.y));
+  return {
+    id: `dig-egg-${underground.digTasks.length + 1}`,
+    type: "digRoom",
+    roomType: "egg",
     targetTiles: targets,
     completedTiles: targets.filter((tile) => underground.grid[tile.y]?.[tile.x]?.type !== "soil").length,
     status: "planned"
@@ -312,6 +358,14 @@ function completeNurseryRoom(underground: Underground): void {
   underground.rooms.push(createNurseryRoom());
 }
 
+function completeEggRoom(underground: Underground): void {
+  if (underground.rooms.some((room) => room.type === "egg")) {
+    return;
+  }
+
+  underground.rooms.push(createEggRoom());
+}
+
 function isStorageUsable(underground: Underground): boolean {
   const center = tilePos(CONFIG.storagePos);
   return isDugTile(underground, center.x, center.y);
@@ -320,6 +374,10 @@ function isStorageUsable(underground: Underground): boolean {
 function tileTypeForTask(task: DigTask, tile: Vec2): UndergroundTileType {
   if (task.type === "digTunnel") {
     return "tunnel";
+  }
+
+  if (task.type === "expandRoom") {
+    return "chamber";
   }
 
   if (task.roomType === "storage") {
@@ -342,6 +400,16 @@ function tileTypeForTask(task: DigTask, tile: Vec2): UndergroundTileType {
     return insideRoom ? "chamber" : "tunnel";
   }
 
+  if (task.roomType === "egg") {
+    const room = createEggRoom();
+    const insideRoom =
+      tile.x >= room.x &&
+      tile.x < room.x + room.width &&
+      tile.y >= room.y &&
+      tile.y < room.y + room.height;
+    return insideRoom ? "chamber" : "tunnel";
+  }
+
   return task.type === "digRoom" || task.type === "expandRoom" ? "chamber" : "tunnel";
 }
 
@@ -352,7 +420,80 @@ function roomIdForTask(task: DigTask): string | undefined {
   if (task.roomType === "nursery") {
     return "room-nursery";
   }
+  if (task.roomType === "egg") {
+    return "room-egg";
+  }
   return undefined;
+}
+
+function roomCenter(room: UndergroundRoom): Vec2 {
+  return { x: room.x + room.width / 2, y: room.y + room.height / 2 };
+}
+
+function roomByType(underground: Underground, roomType: UndergroundRoom["type"]): UndergroundRoom | undefined {
+  return underground.rooms.find((room) => room.type === roomType);
+}
+
+function expansionTargetTiles(underground: Underground, room: UndergroundRoom): Vec2[] {
+  const tiles: Vec2[] = [];
+  const minX = room.x - 1;
+  const maxX = room.x + room.width;
+  const minY = room.y - 1;
+  const maxY = room.y + room.height;
+
+  for (let x = minX; x <= maxX; x += 1) {
+    tiles.push({ x, y: minY }, { x, y: maxY });
+  }
+  for (let y = room.y; y < room.y + room.height; y += 1) {
+    tiles.push({ x: minX, y }, { x: maxX, y });
+  }
+
+  return uniqueTiles(tiles)
+    .filter((tile) => inBounds(underground.grid, tile.x, tile.y) && underground.grid[tile.y]?.[tile.x]?.type === "soil")
+    .sort((a, b) => Math.hypot(a.x - roomCenter(room).x, a.y - roomCenter(room).y) - Math.hypot(b.x - roomCenter(room).x, b.y - roomCenter(room).y))
+    .slice(0, CONFIG.roomExpandMaxTiles);
+}
+
+function makeExpandRoomTask(underground: Underground, room: UndergroundRoom): DigTask | null {
+  const targets = expansionTargetTiles(underground, room);
+  if (targets.length === 0) {
+    return null;
+  }
+
+  return {
+    id: `expand-${room.type}-${underground.digTasks.length + 1}`,
+    type: "expandRoom",
+    roomType: room.type,
+    targetTiles: targets,
+    completedTiles: 0,
+    status: "planned"
+  };
+}
+
+function completeRoomExpansion(underground: Underground, task: DigTask): void {
+  if (!task.roomType) {
+    return;
+  }
+
+  const room = roomByType(underground, task.roomType);
+  if (!room) {
+    return;
+  }
+
+  const chamberTiles = task.targetTiles.filter((tile) => underground.grid[tile.y]?.[tile.x]?.type === "chamber");
+  if (chamberTiles.length === 0) {
+    return;
+  }
+
+  const minX = Math.min(room.x, ...chamberTiles.map((tile) => tile.x));
+  const minY = Math.min(room.y, ...chamberTiles.map((tile) => tile.y));
+  const maxX = Math.max(room.x + room.width - 1, ...chamberTiles.map((tile) => tile.x));
+  const maxY = Math.max(room.y + room.height - 1, ...chamberTiles.map((tile) => tile.y));
+  room.x = minX;
+  room.y = minY;
+  room.width = maxX - minX + 1;
+  room.height = maxY - minY + 1;
+  room.capacity += CONFIG.roomExpandCapacityStep;
 }
 
 export function isDugTileType(type: UndergroundTileType | undefined): boolean {
@@ -406,6 +547,7 @@ export function completeDigTile(underground: Underground, taskId: string | undef
   }
 
   setTile(underground.grid, tile.x, tile.y, tileTypeForTask(task, tile), roomIdForTask(task));
+  underground.dirtMound += CONFIG.dirtPerDugTile;
   refreshDigTasks(underground);
   return true;
 }
@@ -422,18 +564,37 @@ export function ensureDiggableUnderground(underground: Underground): Underground
 }
 
 export function refreshDigTasks(underground: Underground): void {
+  updateRoomUsage(underground);
+
   if (!isStorageRoomDug(underground) && !hasStorageTask(underground)) {
     underground.digTasks.push(makeStorageDigTask(underground));
   }
 
+  const hasEggs = underground.brood.some((brood) => brood.stage === "egg");
+  if (hasEggs && !underground.rooms.some((room) => room.type === "egg") && !hasRoomTask(underground, "egg")) {
+    underground.digTasks.unshift(makeEggRoomDigTask(underground));
+  }
+
+  for (const room of underground.rooms) {
+    if (room.type === "queen" || hasRoomTask(underground, room.type) || room.used < room.capacity) {
+      continue;
+    }
+
+    const task = makeExpandRoomTask(underground, room);
+    if (task) {
+      underground.digTasks.push(task);
+    }
+  }
+
   for (const task of underground.digTasks) {
     task.completedTiles = task.targetTiles.filter((tile) => underground.grid[tile.y]?.[tile.x]?.type !== "soil").length;
-    if (task.roomType === "storage" && isStorageUsable(underground)) {
+    if (task.status === "done") {
+      continue;
+    }
+
+    if (task.type !== "expandRoom" && task.roomType === "storage" && isStorageUsable(underground)) {
       task.status = "done";
       completeStorageRoom(underground);
-    } else if (task.roomType === "nursery" && isDugTile(underground, Math.round(CONFIG.nurseryPos.x), Math.round(CONFIG.nurseryPos.y))) {
-      task.status = "done";
-      completeNurseryRoom(underground);
     } else if (task.completedTiles >= task.targetTiles.length) {
       task.status = "done";
       if (task.roomType === "storage") {
@@ -442,10 +603,16 @@ export function refreshDigTasks(underground: Underground): void {
       if (task.roomType === "nursery") {
         completeNurseryRoom(underground);
       }
-    } else if (task.status === "done") {
-      task.status = "active";
+      if (task.roomType === "egg") {
+        completeEggRoom(underground);
+      }
+      if (task.type === "expandRoom") {
+        completeRoomExpansion(underground, task);
+      }
     }
   }
+
+  updateRoomUsage(underground);
 }
 
 export function planNurseryIfNeeded(underground: Underground): void {
@@ -454,6 +621,21 @@ export function planNurseryIfNeeded(underground: Underground): void {
   }
 
   underground.digTasks.push(makeNurseryDigTask(underground));
+}
+
+export function updateRoomUsage(underground: Underground): void {
+  const eggCount = underground.brood.filter((brood) => brood.stage === "egg").length;
+  const larvaCount = underground.brood.filter((brood) => brood.stage === "larva").length;
+
+  for (const room of underground.rooms) {
+    if (room.type === "storage") {
+      room.used = Math.floor(underground.foodStorage);
+    } else if (room.type === "egg") {
+      room.used = eggCount;
+    } else if (room.type === "nursery") {
+      room.used = larvaCount;
+    }
+  }
 }
 
 export function createUnderground(): Underground {
