@@ -91,7 +91,7 @@ export const CONFIG = {
   // Queen meals come from storage; missed meals increment starve, and too many missed meals kill her.
   queenEatEveryTicks: 75,
   queenFoodPerMeal: 0.65,
-  queenStarveBuffer: 18,
+  queenStarveBuffer: 26,
   // Brood work only starts when the colony has enough reserve, so food gathering cannot deadlock.
   nurseMinFoodReserve: 8,
   maxConcurrentNurses: 3,
@@ -137,7 +137,7 @@ export const CONFIG = {
   spiderLowHpRetreatUtility: 1.3,
   spiderKillWeight: 900,
   spiderSurviveWeight: 1,
-  spiderLifeMaxTicks: 8000,
+  spiderLifeMaxTicks: 16000,
   spiderArchiveSize: 6,
   spiderTournamentSize: 3,
   spiderMutationRate: 0.15,
@@ -146,7 +146,7 @@ export const CONFIG = {
   starveFoodThreshold: 3,
   starveStorageThreshold: 6,
   colonyDeathMinTicks: 120,
-  generationMaxTicks: 6000,
+  generationMaxTicks: 12000,
   fitnessPopWeight: 0,
   fitnessFoodWeight: 4,
   fitnessSpiderWeight: 2500,
