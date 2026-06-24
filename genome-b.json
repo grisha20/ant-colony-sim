@@ -1,14 +1,14 @@
 {
   "current": {
-    "id": "genome-mqrv649h-2rdjim",
-    "generation": 2,
+    "id": "genome-mqrv65sl-1vumsi",
+    "generation": 3,
     "genes": {
-      "nurseFraction": 0.5055671571976604,
-      "forageSpread": 0.33841332732629537,
-      "spiderAttackStorage": 1.6324245154432733,
-      "layReserve": 18.644330842108907,
-      "refuelThreshold": 358.02103767390236,
-      "spiderAvoid": 7.473471238342746
+      "nurseFraction": 0.5552119502516721,
+      "forageSpread": 0.3561007744150405,
+      "spiderAttackStorage": 8.899251963426332,
+      "layReserve": 21.44350943475327,
+      "refuelThreshold": 343.06282192742003,
+      "spiderAvoid": 6.592500962788654
     }
   },
   "best": {
@@ -116,5 +116,5 @@
       "fitness": 262.8735426008969
     }
   ],
-  "generationsRun": 83
+  "generationsRun": 86
 }
