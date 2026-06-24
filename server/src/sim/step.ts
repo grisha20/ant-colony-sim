@@ -4,6 +4,7 @@ import { CONFIG } from "../config";
 import { stepAnt } from "./ant";
 import { updateBrood, updateQueen } from "./brood";
 import { updateEnemies } from "./enemy";
+import { planNurseryIfNeeded, refreshDigTasks } from "./underground";
 import {
   colonyWorldView,
   createColonyRuntime,
@@ -105,6 +106,10 @@ export function step(world: World): void {
 
   for (const colony of world.colonies) {
     const scopedWorld = colonyWorldView(world, colony);
+    if (colony.underground.brood.some((brood) => brood.stage === "egg" && brood.location === "queen")) {
+      planNurseryIfNeeded(colony.underground);
+    }
+    refreshDigTasks(colony.underground);
     colony.directives = computeDirectives(scopedWorld, colony.genomeState.current);
     for (const ant of colony.ants) {
       stepAnt(scopedWorld, ant);
@@ -118,6 +123,7 @@ export function step(world: World): void {
     const scopedWorld = colonyWorldView(world, colony);
     updateQueen(scopedWorld);
     updateBrood(scopedWorld);
+    refreshDigTasks(colony.underground);
     removeDeadAndSyncLayerLists(colony);
     updateFitness(scopedWorld);
     evolveAfterQueenDeath(world, colony);

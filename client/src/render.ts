@@ -25,6 +25,7 @@ export type Camera = {
 const SURFACE_TILE_SIZE = 8;
 const UNDERGROUND_WIDTH = 780;
 const UNDERGROUND_HEIGHT = 540;
+const SHOW_UNDERGROUND_DEBUG = false;
 
 const undergroundLayout = {
   surfaceY: 58,
@@ -159,6 +160,33 @@ function undergroundToScreen(world: WorldSnapshot, pos: Vec2): Vec2 {
     x: undergroundLayout.marginX + clamp01(pos.x / world.underground.width) * xRange,
     y: yTop + clamp01(pos.y / world.underground.height) * yRange
   };
+}
+
+function undergroundGridMetrics(world: WorldSnapshot): { x: number; y: number; cellWidth: number; cellHeight: number } {
+  const xRange = UNDERGROUND_WIDTH - undergroundLayout.marginX * 2;
+  const yTop = undergroundLayout.surfaceY + 28;
+  const yRange = UNDERGROUND_HEIGHT - yTop - undergroundLayout.bottomPadding;
+  return {
+    x: undergroundLayout.marginX,
+    y: yTop,
+    cellWidth: xRange / world.underground.width,
+    cellHeight: yRange / world.underground.height
+  };
+}
+
+function undergroundTileAt(world: WorldSnapshot, pos: Vec2): string | undefined {
+  const x = Math.max(0, Math.min(world.underground.width - 1, Math.floor(pos.x)));
+  const y = Math.max(0, Math.min(world.underground.height - 1, Math.floor(pos.y)));
+  return world.underground.grid[y]?.[x]?.type;
+}
+
+function isDugUndergroundPos(world: WorldSnapshot, pos: Vec2): boolean {
+  const type = undergroundTileAt(world, pos);
+  return type === "tunnel" || type === "chamber" || type === "entrance";
+}
+
+function hasUndergroundRoom(world: WorldSnapshot, type: string): boolean {
+  return world.underground.rooms.some((room) => room.type === type);
 }
 
 function undergroundEntranceTop(world: WorldSnapshot): Vec2 {
@@ -300,7 +328,8 @@ function renderSurface(
     Math.floor(bounds.left),
     Math.ceil(bounds.right),
     Math.floor(bounds.top),
-    Math.ceil(bounds.bottom)
+    Math.ceil(bounds.bottom),
+    ...(world.colonies?.map((colony) => Math.floor(colony.underground.dirtMound)) ?? [Math.floor(world.underground.dirtMound)])
   ].join(":");
   if (scene.staticKey !== staticKey) {
     rebuildSurfaceStatic(scene, world, cell, bounds, staticKey);
@@ -468,12 +497,13 @@ function drawSurfaceEntranceAt(root: Container, pos: Vec2, cell: number, color: 
   const mound = color === "red" ? 0x9a513f : 0x8d6a3e;
   const soil = color === "red" ? 0x7d3b32 : 0x73502f;
 
-  entrance.rect(x - 25, y + 9, 50, 8).fill(mound);
-  entrance.rect(x - 18, y + 1, 36, 11).fill(soil);
-  entrance.rect(x - 14, y - 8, 28, 24).fill(0x2a1a12);
-  entrance.rect(x - 8, y - 3, 16, 13).fill(0x0c0806);
-  entrance.rect(x - 21, y - 13, 8, 8).fill(mound);
-  entrance.rect(x + 13, y - 12, 9, 7).fill(mound);
+  entrance.ellipse(x, y + 12, 31, 12).fill({ color: mound, alpha: 0.92 });
+  entrance.ellipse(x - 10, y + 8, 20, 8).fill({ color: soil, alpha: 0.88 });
+  entrance.ellipse(x + 12, y + 10, 15, 6).fill({ color: 0xc09868, alpha: 0.42 });
+  entrance.ellipse(x, y + 3, 15, 12).fill(0x2a1a12);
+  entrance.ellipse(x, y + 5, 9, 8).fill(0x0c0806);
+  entrance.ellipse(x - 19, y - 2, 7, 4).fill({ color: mound, alpha: 0.82 });
+  entrance.ellipse(x + 18, y - 1, 8, 4).fill({ color: mound, alpha: 0.74 });
   root.addChild(entrance);
 }
 
@@ -481,6 +511,19 @@ function drawSurfaceEntrance(root: Container, world: WorldSnapshot, cell: number
   const entrances = world.surface.entrances ?? [world.surface.entrance];
   entrances.forEach((entrance, index) => {
     drawSurfaceEntranceAt(root, entrance, cell, index === 1 ? "red" : "dark");
+    const dirtMound = world.colonies?.[index]?.underground.dirtMound ?? (index === 0 ? world.underground.dirtMound : 0);
+    if (dirtMound <= 0) {
+      return;
+    }
+
+    const x = Math.round(entrance.x * cell);
+    const y = Math.round(entrance.y * cell);
+    const mound = new Graphics();
+    const radius = Math.min(34, 8 + Math.sqrt(dirtMound) * 2.4);
+    const moundColor = index === 1 ? 0x9a513f : 0x8d6a3e;
+    mound.ellipse(x + 21, y + 19, radius, radius * 0.42).fill({ color: moundColor, alpha: 0.82 });
+    mound.ellipse(x + 28, y + 15, radius * 0.48, radius * 0.25).fill({ color: 0xc09868, alpha: 0.55 });
+    root.addChild(mound);
   });
 }
 
@@ -564,7 +607,9 @@ function renderUnderground(scene: UndergroundScene, world: WorldSnapshot, viewpo
     world.underground.barracksA.x,
     world.underground.barracksA.y,
     world.underground.barracksB.x,
-    world.underground.barracksB.y
+    world.underground.barracksB.y,
+    world.underground.digTasks.map((task) => `${task.id}:${task.status}:${task.completedTiles}/${task.targetTiles.length}`).join(","),
+    world.underground.grid.map((row) => row.map((tile) => `${tile.type[0]}${tile.digProgress ? Math.floor(tile.digProgress) : ""}`).join("")).join("")
   ].join(":");
   if (scene.staticKey !== staticKey) {
     rebuildUndergroundStatic(scene, world, staticKey);
@@ -579,7 +624,7 @@ function renderUnderground(scene: UndergroundScene, world: WorldSnapshot, viewpo
 function rebuildUndergroundStatic(scene: UndergroundScene, world: WorldSnapshot, staticKey: string): void {
   scene.staticLayer.removeChildren();
   drawUndergroundEarth(scene.staticLayer);
-  drawDecorativeTunnels(scene.staticLayer, world);
+  drawUndergroundGrid(scene.staticLayer, world);
   scene.staticKey = staticKey;
 }
 
@@ -605,51 +650,67 @@ function drawUndergroundEarth(root: Container): void {
   root.addChild(earth);
 }
 
-function drawDecorativeTunnels(root: Container, world: WorldSnapshot): void {
+function drawUndergroundGrid(root: Container, world: WorldSnapshot): void {
   const entranceTop = undergroundEntranceTop(world);
-  const entrance = undergroundToScreen(world, world.underground.entrance);
-  const junction = undergroundToScreen(world, world.underground.junction);
-  const queen = undergroundToScreen(world, world.underground.queenChamber);
-  const nursery = undergroundToScreen(world, world.underground.nursery);
-  const storage = undergroundToScreen(world, world.underground.storage);
-  const barracksA = undergroundToScreen(world, world.underground.barracksA);
-  const barracksB = undergroundToScreen(world, world.underground.barracksB);
-  const tunnels = new Graphics();
-  tunnels.setStrokeStyle({ width: 34, color: 0xb9875c, alpha: 1 });
-  tunnels.moveTo(entranceTop.x, entranceTop.y);
-  tunnels.lineTo(entrance.x, entrance.y);
-  tunnels.lineTo(junction.x, junction.y);
-  tunnels.moveTo(junction.x, junction.y);
-  tunnels.lineTo(queen.x, queen.y);
-  tunnels.moveTo(junction.x, junction.y);
-  tunnels.lineTo(storage.x, storage.y);
-  tunnels.moveTo(junction.x, junction.y);
-  tunnels.lineTo(nursery.x, nursery.y);
-  tunnels.moveTo(junction.x, junction.y);
-  tunnels.lineTo(barracksA.x, barracksA.y);
-  tunnels.moveTo(junction.x, junction.y);
-  tunnels.lineTo(barracksB.x, barracksB.y);
-  tunnels.stroke();
+  const metrics = undergroundGridMetrics(world);
+  const grid = new Graphics();
 
-  tunnels.ellipse(queen.x, queen.y, 112, 70).fill(0xb9875c);
-  tunnels.ellipse(nursery.x, nursery.y, 95, 58).fill(0xb9875c);
-  tunnels.ellipse(storage.x, storage.y, 98, 60).fill(0xb9875c);
-  tunnels.ellipse(barracksA.x, barracksA.y, 78, 46).fill(0xb9875c);
-  tunnels.ellipse(barracksB.x, barracksB.y, 78, 46).fill(0xb9875c);
+  for (let y = 0; y < world.underground.grid.length; y += 1) {
+    const row = world.underground.grid[y];
+    for (let x = 0; x < row.length; x += 1) {
+      const tile = row[x];
+      if (tile.type === "soil" && !tile.digProgress) {
+        continue;
+      }
 
-  tunnels.setStrokeStyle({ width: 6, color: 0x6c482e, alpha: 0.55 });
-  tunnels.ellipse(queen.x, queen.y, 112, 70).stroke();
-  tunnels.ellipse(nursery.x, nursery.y, 95, 58).stroke();
-  tunnels.ellipse(storage.x, storage.y, 98, 60).stroke();
-  tunnels.ellipse(barracksA.x, barracksA.y, 78, 46).stroke();
-  tunnels.ellipse(barracksB.x, barracksB.y, 78, 46).stroke();
+      const screenX = metrics.x + x * metrics.cellWidth;
+      const screenY = metrics.y + y * metrics.cellHeight;
+      if (tile.type === "soil") {
+        grid.rect(screenX, screenY, Math.ceil(metrics.cellWidth), Math.ceil(metrics.cellHeight)).fill({
+          color: 0x9b7048,
+          alpha: 0.22 + Math.min(0.34, (tile.digProgress ?? 0) / 20)
+        });
+      } else if (tile.type === "entrance") {
+        grid.rect(screenX, screenY, Math.ceil(metrics.cellWidth), Math.ceil(metrics.cellHeight)).fill(0x2d1b12);
+      } else {
+        const color = tile.type === "chamber" ? 0xbf8b61 : 0xb47b50;
+        grid.rect(screenX, screenY, Math.ceil(metrics.cellWidth), Math.ceil(metrics.cellHeight)).fill(color);
+      }
+    }
+  }
 
-  tunnels.rect(entranceTop.x - 24, entranceTop.y - 10, 48, 18).fill(0x2d1b12);
-  tunnels.rect(entranceTop.x - 14, entranceTop.y - 5, 28, 12).fill(0x100a07);
-  root.addChild(tunnels);
+  if (SHOW_UNDERGROUND_DEBUG) {
+    for (const task of world.underground.digTasks) {
+      if (task.status === "done") {
+        continue;
+      }
+
+      const color = task.status === "active" ? 0xf1c56a : 0xd9a86a;
+      for (const tile of task.targetTiles) {
+        if (world.underground.grid[tile.y]?.[tile.x]?.type !== "soil") {
+          continue;
+        }
+
+        grid.rect(
+          metrics.x + tile.x * metrics.cellWidth,
+          metrics.y + tile.y * metrics.cellHeight,
+          Math.ceil(metrics.cellWidth),
+          Math.ceil(metrics.cellHeight)
+        ).fill({ color, alpha: task.status === "active" ? 0.18 : 0.08 });
+      }
+    }
+  }
+
+  grid.ellipse(entranceTop.x, entranceTop.y, 24, 10).fill(0x2d1b12);
+  grid.ellipse(entranceTop.x, entranceTop.y + 2, 14, 7).fill(0x100a07);
+  root.addChild(grid);
 }
 
 function updateUndergroundQueen(queen: Sprite, world: WorldSnapshot): void {
+  queen.visible = isDugUndergroundPos(world, world.underground.queenChamber);
+  if (!queen.visible) {
+    return;
+  }
   const pos = undergroundToScreen(world, world.underground.queenChamber);
   const color = world.colony?.id === "colony-2" ? "red" : "dark";
   queen.texture = getQueenTexture(color);
@@ -679,6 +740,9 @@ function updateUndergroundBrood(pool: SpritePool, world: WorldSnapshot): void {
   beginPool(pool);
 
   world.underground.brood.forEach((brood, index) => {
+    if (!isDugUndergroundPos(world, brood.pos)) {
+      return;
+    }
     const sprite = acquireSprite(pool);
     const pos = broodPosition(brood, world, index);
     sprite.texture = brood.stage === "egg" ? getEggTexture() : getLarvaTexture();
@@ -688,6 +752,9 @@ function updateUndergroundBrood(pool: SpritePool, world: WorldSnapshot): void {
   });
 
   world.underground.princesses.forEach((princess, index) => {
+    if (!isDugUndergroundPos(world, princess.pos)) {
+      return;
+    }
     const sprite = acquireSprite(pool);
     const pos = undergroundToScreen(world, princess.pos);
     const offset = deterministicOffset(index + princess.id.length, 28);
@@ -703,8 +770,13 @@ function updateUndergroundBrood(pool: SpritePool, world: WorldSnapshot): void {
 function updateUndergroundStorage(pool: SpritePool, world: WorldSnapshot): void {
   beginPool(pool);
 
+  if (!hasUndergroundRoom(world, "storage") || !isDugUndergroundPos(world, world.underground.storage)) {
+    endPool(pool);
+    return;
+  }
+
   const storage = undergroundToScreen(world, world.underground.storage);
-  const count = Math.max(1, Math.min(28, Math.ceil(world.underground.foodStorage / 2)));
+  const count = Math.max(0, Math.min(28, Math.ceil(world.underground.foodStorage / 2)));
   for (let index = 0; index < count; index += 1) {
     const sprite = acquireSprite(pool);
     const column = index % 7;
@@ -734,7 +806,10 @@ function updateUndergroundAnts(pool: SpritePool, world: WorldSnapshot): void {
     }
 
     const pos = undergroundAntPosition(ant, world);
-    const carrying = ant.carrying > 0 || ant.state === "deposit" || ant.state === "carryBrood";
+    if (!isDugUndergroundPos(world, ant.pos)) {
+      continue;
+    }
+    const carrying = ant.carrying > 0 || ant.carryingDirt || ant.state === "deposit" || ant.state === "carryBrood" || ant.state === "carryDirt";
     const color = ant.colonyId === "colony-2" ? "red" : "dark";
     const sprite = acquireSprite(pool);
     sprite.texture = getAntTexture(carrying, color);

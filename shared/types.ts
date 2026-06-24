@@ -15,8 +15,42 @@ export type AntState =
   | "deposit"
   | "carryBrood"
   | "feed"
+  | "dig"
+  | "carryDirt"
   | "fight"
   | "dead";
+
+export type UndergroundTileType = "soil" | "tunnel" | "chamber" | "entrance";
+
+export type UndergroundTile = {
+  type: UndergroundTileType;
+  roomId?: string;
+  digProgress?: number;
+};
+
+export type UndergroundRoomType = "queen" | "storage" | "egg" | "nursery" | "barracks";
+
+export type UndergroundRoom = {
+  id: string;
+  type: UndergroundRoomType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  capacity: number;
+  used: number;
+};
+
+export type DigTaskType = "digTunnel" | "digRoom" | "expandRoom";
+
+export type DigTask = {
+  id: string;
+  type: DigTaskType;
+  roomType?: UndergroundRoomType;
+  targetTiles: Vec2[];
+  completedTiles: number;
+  status: "planned" | "active" | "done";
+};
 
 export type Brood = {
   id: string;
@@ -32,6 +66,7 @@ export type Ant = {
   id: string;
   colonyId: string;
   role: "worker";
+  job?: "forage" | "nurse" | "dig" | "carryDirt" | "idle";
   layer: Layer;
   state: AntState;
   pos: Vec2;
@@ -39,6 +74,11 @@ export type Ant = {
   carrying: number;
   heading: Vec2;
   broodId?: string;
+  carryingDirt?: boolean;
+  digTaskId?: string;
+  digTarget?: Vec2;
+  digStandPos?: Vec2;
+  digProgress?: number;
 };
 
 export type Queen = {
@@ -59,6 +99,10 @@ export type Princess = {
 export type Underground = {
   width: number;
   height: number;
+  grid: UndergroundTile[][];
+  rooms: UndergroundRoom[];
+  digTasks: DigTask[];
+  dirtMound: number;
   queen: Queen;
   brood: Brood[];
   foodStorage: number;

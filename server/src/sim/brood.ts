@@ -95,15 +95,15 @@ export function updateQueen(world: World): void {
     return;
   }
 
-  const hasDirtyEggs = underground.brood.some(
+  const eggsNearQueen = underground.brood.filter(
     (brood) =>
       brood.stage === "egg" &&
       brood.location === "queen" &&
-      brood.progress >= CONFIG.queenStressDirtyEggTicks &&
       Math.hypot(brood.pos.x - underground.queenChamber.x, brood.pos.y - underground.queenChamber.y) <= CONFIG.undergroundNodeRadius * 2
   );
+  const crowdedEggs = Math.max(0, eggsNearQueen.length - CONFIG.queenEggComfortLimit);
   underground.queen.stress = clamp(
-    underground.queen.stress + (hasDirtyEggs ? CONFIG.queenStressPerTick : -CONFIG.queenStressReliefPerTick),
+    underground.queen.stress + (crowdedEggs > 0 ? CONFIG.queenStressPerTick * crowdedEggs : -CONFIG.queenStressReliefPerTick),
     0,
     100
   );
@@ -136,8 +136,11 @@ export function updateQueen(world: World): void {
 
   underground.queen.layCooldown -= 1;
   const totalPopulation = world.ants.length + underground.brood.length;
+  const queenHasEggSpace =
+    eggsNearQueen.length < CONFIG.queenEggComfortLimit || underground.rooms.some((room) => room.type === "nursery");
   if (
     underground.queen.layCooldown <= 0 &&
+    queenHasEggSpace &&
     underground.foodStorage >= world.directives.layReserve + CONFIG.eggCost &&
     totalPopulation < colony.nestCapacity
   ) {

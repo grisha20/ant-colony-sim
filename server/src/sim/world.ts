@@ -6,7 +6,7 @@ import { CONFIG } from "../config";
 import { createColony, syncColonyStats } from "./colony";
 import { createSpider, syncEnemyIdCounter } from "./enemy";
 import { PheromoneGrid } from "./pheromone";
-import { createUnderground, syncBroodIdCounter } from "./underground";
+import { createUnderground, ensureDiggableUnderground, syncBroodIdCounter } from "./underground";
 
 export type ColonyRuntime = {
   id: string;
@@ -429,7 +429,7 @@ function normalizeUndergroundSnapshot(
 ): Underground {
   const queenChamber = underground.queenChamber ?? underground.queen.pos ?? CONFIG.queenPos;
   const nursery = underground.nursery ?? CONFIG.nurseryPos;
-  const normalized: Underground = {
+  const normalized: Underground = ensureDiggableUnderground({
     ...underground,
     queen: {
       ...underground.queen,
@@ -463,7 +463,7 @@ function normalizeUndergroundSnapshot(
     barracksA: underground.barracksA ?? CONFIG.barracksAPos,
     barracksB: underground.barracksB ?? CONFIG.barracksBPos,
     princesses: underground.princesses ?? []
-  };
+  });
 
   return normalized;
 }

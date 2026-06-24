@@ -1,6 +1,13 @@
 import type { Ant, Brood, Vec2 } from "../../../shared/types";
 import { CONFIG } from "../config";
-import { nextWaypoint, type UndergroundNode } from "./nav";
+import type { UndergroundNode } from "./nav";
+import {
+  completeDigTile,
+  findDigTarget,
+  isDugTile,
+  refreshDigTasks,
+  tileCenter
+} from "./underground";
 import type { World } from "./world";
 import { randomHeading } from "./world";
 
@@ -93,9 +100,115 @@ function clampToUnderground(ant: Ant, world: World): void {
   ant.pos.y = Math.max(0, Math.min(world.underground.height - 0.01, ant.pos.y));
 }
 
-function moveUndergroundToNode(world: World, ant: Ant, destination: UndergroundNode): void {
-  moveToward(ant, nextWaypoint(ant.pos, destination), CONFIG.workerUndergroundSpeed);
+function posTile(pos: Vec2): Vec2 {
+  return {
+    x: Math.max(0, Math.min(CONFIG.undergroundWidth - 1, Math.floor(pos.x))),
+    y: Math.max(0, Math.min(CONFIG.undergroundHeight - 1, Math.floor(pos.y)))
+  };
+}
+
+function tileKey(tile: Vec2): string {
+  return `${tile.x}:${tile.y}`;
+}
+
+function isDugPos(world: World, pos: Vec2): boolean {
+  const tile = posTile(pos);
+  return isDugTile(world.underground, tile.x, tile.y);
+}
+
+function findNearestDugTile(world: World, from: Vec2): Vec2 | null {
+  const start = posTile(from);
+  if (isDugTile(world.underground, start.x, start.y)) {
+    return start;
+  }
+
+  for (let radius = 1; radius <= 8; radius += 1) {
+    for (let y = start.y - radius; y <= start.y + radius; y += 1) {
+      for (let x = start.x - radius; x <= start.x + radius; x += 1) {
+        if (isDugTile(world.underground, x, y)) {
+          return { x, y };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function findDugPathNext(world: World, from: Vec2, to: Vec2): Vec2 | null {
+  const start = posTile(from);
+  const target = posTile(to);
+  if (!isDugTile(world.underground, target.x, target.y)) {
+    return null;
+  }
+  if (!isDugTile(world.underground, start.x, start.y)) {
+    return findNearestDugTile(world, from);
+  }
+  if (start.x === target.x && start.y === target.y) {
+    return target;
+  }
+
+  const queue: Vec2[] = [start];
+  const cameFrom = new Map<string, string | null>([[tileKey(start), null]]);
+  const dirs = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 }
+  ];
+
+  while (queue.length > 0) {
+    const current = queue.shift() as Vec2;
+    if (current.x === target.x && current.y === target.y) {
+      break;
+    }
+
+    for (const dir of dirs) {
+      const next = { x: current.x + dir.x, y: current.y + dir.y };
+      const key = tileKey(next);
+      if (cameFrom.has(key) || !isDugTile(world.underground, next.x, next.y)) {
+        continue;
+      }
+      cameFrom.set(key, tileKey(current));
+      queue.push(next);
+    }
+  }
+
+  const targetKey = tileKey(target);
+  if (!cameFrom.has(targetKey)) {
+    return null;
+  }
+
+  let cursorKey = targetKey;
+  let previousKey = cameFrom.get(cursorKey);
+  while (previousKey && previousKey !== tileKey(start)) {
+    cursorKey = previousKey;
+    previousKey = cameFrom.get(cursorKey);
+  }
+
+  const [x, y] = cursorKey.split(":").map(Number);
+  return { x, y };
+}
+
+function moveUndergroundToward(world: World, ant: Ant, target: Vec2, speed: number = CONFIG.workerUndergroundSpeed): boolean {
+  const nextTile = findDugPathNext(world, ant.pos, target);
+  if (!nextTile) {
+    const fallback = findNearestDugTile(world, ant.pos);
+    if (fallback) {
+      ant.pos = tileCenter(fallback);
+      clampToUnderground(ant, world);
+    }
+    return false;
+  }
+
+  const nextTarget = nextTile.x === posTile(target).x && nextTile.y === posTile(target).y ? target : tileCenter(nextTile);
+  moveToward(ant, nextTarget, Math.min(speed, Math.max(0.15, distance(ant.pos, nextTarget))));
   clampToUnderground(ant, world);
+  return isDugPos(world, ant.pos);
+}
+
+function moveUndergroundToNode(world: World, ant: Ant, destination: UndergroundNode): boolean {
+  const target = world.underground[destination];
+  return moveUndergroundToward(world, ant, target);
 }
 
 function restNodeForAnt(ant: Ant): UndergroundNode {
@@ -117,13 +230,18 @@ function restUnderground(world: World, ant: Ant): void {
   const node = restNodeForAnt(ant);
   const target = restTargetForAnt(world, ant, node);
   ant.state = "idle";
+  ant.job = "idle";
+  if (!isDugPos(world, target)) {
+    guardQueen(world, ant);
+    return;
+  }
   if (distance(ant.pos, target) <= 0.8) {
     return;
   }
 
   const nodePos = node === "barracksA" ? world.underground.barracksA : world.underground.barracksB;
   if (distance(ant.pos, nodePos) <= CONFIG.undergroundNodeRadius) {
-    moveToward(ant, target, CONFIG.workerUndergroundSpeed * 0.35);
+    moveUndergroundToward(world, ant, target, CONFIG.workerUndergroundSpeed * 0.35);
     clampToUnderground(ant, world);
     return;
   }
@@ -147,6 +265,7 @@ function queenGuardIds(world: World): Set<string> {
 
 function guardQueen(world: World, ant: Ant): void {
   ant.state = "idle";
+  ant.job = "idle";
   if (distance(ant.pos, world.underground.queenChamber) <= CONFIG.undergroundNodeRadius) {
     return;
   }
@@ -156,6 +275,10 @@ function guardQueen(world: World, ant: Ant): void {
 
 function broodTarget(world: World, brood: Brood): Vec2 {
   return brood.location === "queen" ? world.underground.queenChamber : world.underground.nursery;
+}
+
+function hasDugRoom(world: World, type: "storage" | "nursery" | "queen" | "egg" | "barracks"): boolean {
+  return world.underground.rooms.some((room) => room.type === type);
 }
 
 function getBrood(world: World, broodId: string | undefined): Brood | undefined {
@@ -429,19 +552,47 @@ function needsBroodTransport(brood: Brood): boolean {
   return brood.stage === "egg" && brood.location === "queen";
 }
 
+function pendingBroodTransportCount(world: World): number {
+  return world.underground.brood.filter((brood) => needsBroodTransport(brood) && !brood.carriedBy && !hasAssignedCarrier(world, brood.id)).length;
+}
+
+function activeNurseLaborCount(world: World): number {
+  return world.ants.filter(
+    (ant) =>
+      (ant.layer === "underground" && (ant.state === "carryBrood" || ant.state === "feed")) ||
+      (ant.layer === "surface" && ant.job === "nurse" && ant.state === "return")
+  ).length;
+}
+
+function needsSurfaceNurseReturn(world: World): boolean {
+  if (!hasDugRoom(world, "nursery") || pendingBroodTransportCount(world) <= 0) {
+    return false;
+  }
+
+  const targetNurses = Math.max(1, Math.min(CONFIG.maxNurses, world.directives.nurseTarget));
+  return activeNurseLaborCount(world) < targetNurses;
+}
+
 function hasAssignedCarrier(world: World, broodId: string): boolean {
   return world.ants.some((ant) => ant.layer === "underground" && ant.state === "carryBrood" && ant.broodId === broodId);
 }
 
 function moveCarryingBrood(world: World, ant: Ant): void {
+  ant.job = "nurse";
   const brood = getBrood(world, ant.broodId);
   if (!brood) {
     ant.broodId = undefined;
     ant.state = "idle";
+    ant.job = "idle";
     return;
   }
 
   if (!brood.carriedBy) {
+    if (brood.location === "nursery" && !hasDugRoom(world, "nursery")) {
+      ant.broodId = undefined;
+      ant.state = "idle";
+      return;
+    }
     const pickupNode: UndergroundNode = brood.location === "queen" ? "queenChamber" : "nursery";
     const target = broodTarget(world, brood);
     if (distance(ant.pos, target) <= CONFIG.undergroundNodeRadius) {
@@ -462,10 +613,11 @@ function moveCarryingBrood(world: World, ant: Ant): void {
   if (distance(ant.pos, world.underground.nursery) <= CONFIG.undergroundNodeRadius) {
     brood.location = "nursery";
     brood.pos = { ...world.underground.nursery };
-    brood.carriedBy = undefined;
-    ant.broodId = undefined;
-    ant.state = "idle";
-    return;
+      brood.carriedBy = undefined;
+      ant.broodId = undefined;
+      ant.state = "idle";
+      ant.job = "idle";
+      return;
   }
 
   moveUndergroundToNode(world, ant, "nursery");
@@ -473,16 +625,19 @@ function moveCarryingBrood(world: World, ant: Ant): void {
 }
 
 function moveFeedingBrood(world: World, ant: Ant): void {
+  ant.job = "nurse";
   const brood = getBrood(world, ant.broodId);
   if (
     !brood ||
     brood.stage !== "larva" ||
     brood.location !== "nursery" ||
+    !hasDugRoom(world, "nursery") ||
     world.underground.foodStorage < CONFIG.nurseMinFoodReserve ||
     ant.energy < world.directives.refuelThreshold
   ) {
     ant.broodId = undefined;
     ant.state = "idle";
+    ant.job = "idle";
     return;
   }
 
@@ -497,24 +652,31 @@ function moveFeedingBrood(world: World, ant: Ant): void {
 }
 
 function assignNurseTask(world: World, ant: Ant): boolean {
+  const nurseryReady = hasDugRoom(world, "nursery");
+  const broodToMove = nurseryReady
+    ? world.underground.brood.find((brood) => needsBroodTransport(brood) && !brood.carriedBy && !hasAssignedCarrier(world, brood.id))
+    : undefined;
+  const nurseDemand = broodToMove ? Math.max(1, world.directives.nurseTarget) : world.directives.nurseTarget;
+
   if (
     ant.state !== "idle" ||
     ant.carrying > 0 ||
     ant.energy < world.directives.refuelThreshold ||
-    world.underground.foodStorage < CONFIG.nurseMinFoodReserve ||
-    busyNurseCount(world) >= world.directives.nurseTarget
+    busyNurseCount(world) >= nurseDemand
   ) {
     return false;
   }
 
-  const broodToMove = world.underground.brood.find(
-    (brood) => needsBroodTransport(brood) && !brood.carriedBy && !hasAssignedCarrier(world, brood.id)
-  );
   if (broodToMove) {
     ant.broodId = broodToMove.id;
     ant.state = "carryBrood";
+    ant.job = "nurse";
     moveCarryingBrood(world, ant);
     return true;
+  }
+
+  if (world.underground.foodStorage < CONFIG.nurseMinFoodReserve) {
+    return false;
   }
 
   const broodToFeed = world.underground.brood.find(
@@ -523,11 +685,112 @@ function assignNurseTask(world: World, ant: Ant): boolean {
   if (broodToFeed) {
     ant.broodId = broodToFeed.id;
     ant.state = "feed";
+    ant.job = "nurse";
     moveFeedingBrood(world, ant);
     return true;
   }
 
   return false;
+}
+
+function assignedDigTargets(world: World, ant: Ant): Set<string> {
+  return new Set();
+}
+
+function clearDigAssignment(ant: Ant): void {
+  ant.digTaskId = undefined;
+  ant.digTarget = undefined;
+  ant.digStandPos = undefined;
+  ant.digProgress = undefined;
+  ant.carryingDirt = false;
+}
+
+function moveCarryingDirt(world: World, ant: Ant): boolean {
+  ant.state = "carryDirt";
+  ant.job = "carryDirt";
+  ant.carryingDirt = true;
+  if (distance(ant.pos, world.underground.entrance) <= CONFIG.undergroundNodeRadius) {
+    world.underground.dirtMound += CONFIG.dirtPerDugTile;
+    clearDigAssignment(ant);
+    ant.state = "idle";
+    ant.job = "idle";
+    return true;
+  }
+
+  moveUndergroundToNode(world, ant, "entrance");
+  return true;
+}
+
+function moveDigging(world: World, ant: Ant): boolean {
+  refreshDigTasks(world.underground);
+
+  if (ant.carryingDirt || ant.state === "carryDirt") {
+    return moveCarryingDirt(world, ant);
+  }
+
+  let target = ant.digTarget && ant.digStandPos && ant.digTaskId
+    ? { taskId: ant.digTaskId, tile: ant.digTarget, standPos: ant.digStandPos }
+    : null;
+
+  if (!target || world.underground.grid[target.tile.y]?.[target.tile.x]?.type !== "soil") {
+    const next = findDigTarget(world.underground, assignedDigTargets(world, ant));
+    if (!next) {
+      clearDigAssignment(ant);
+      return false;
+    }
+    target = { taskId: next.task.id, tile: next.tile, standPos: next.standPos };
+    ant.digTaskId = target.taskId;
+    ant.digTarget = target.tile;
+    ant.digStandPos = target.standPos;
+    ant.digProgress = 0;
+  }
+
+  ant.state = "dig";
+  ant.job = "dig";
+  if (distance(ant.pos, target.standPos) > 0.55) {
+    moveUndergroundToward(world, ant, target.standPos);
+    return true;
+  }
+
+  const current = world.underground.grid[target.tile.y]?.[target.tile.x];
+  if (!current || current.type !== "soil") {
+    clearDigAssignment(ant);
+    return false;
+  }
+
+  ant.heading = normalize({ x: target.tile.x + 0.5 - ant.pos.x, y: target.tile.y + 0.5 - ant.pos.y });
+  current.digProgress = (current.digProgress ?? 0) + CONFIG.digProgressPerTick;
+  ant.digProgress = current.digProgress;
+  if (current) {
+    current.digProgress = ant.digProgress;
+  }
+
+  if (current.digProgress >= CONFIG.digProgressPerTile && completeDigTile(world.underground, target.taskId, target.tile)) {
+    ant.carryingDirt = true;
+    ant.state = "carryDirt";
+    ant.job = "carryDirt";
+    ant.digProgress = 0;
+  }
+  return true;
+}
+
+function assignDigTask(world: World, ant: Ant): boolean {
+  if (
+    ant.layer !== "underground" ||
+    ant.carrying > 0 ||
+    ant.state !== "idle"
+  ) {
+    return false;
+  }
+
+  const activeDiggers = world.ants.filter(
+    (other) => other.layer === "underground" && (other.state === "dig" || other.state === "carryDirt")
+  ).length;
+  if (activeDiggers >= CONFIG.maxDiggers) {
+    return false;
+  }
+
+  return moveDigging(world, ant);
 }
 
 function nearestAvailableFood(world: World, ant: Ant): number {
@@ -573,16 +836,26 @@ function moveHungryToFood(world: World, ant: Ant): boolean {
   }
 
   ant.state = "search";
+  ant.job = "forage";
   moveSurfaceToward(world, ant, world.surface.foodSources[foodIndex].pos, !isColonyStarving(world));
   return true;
 }
 
 function moveHungryHome(world: World, ant: Ant): void {
   ant.state = "return";
+  ant.job = "forage";
+  moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world));
+  tryCrossLayer(world, ant);
+}
+
+function moveNurseHome(world: World, ant: Ant): void {
+  ant.state = "return";
+  ant.job = "nurse";
   moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world));
   tryCrossLayer(world, ant);
 }
 function moveSearching(world: World, ant: Ant): void {
+  ant.job = "forage";
   const speed = surfaceMoveSpeed(world, ant);
   const foodIndex = nearestAvailableFood(world, ant);
   if (foodIndex >= 0 && pickupFoodIfReached(world, ant, foodIndex)) {
@@ -637,6 +910,7 @@ function moveSearching(world: World, ant: Ant): void {
 }
 
 function moveCarrying(world: World, ant: Ant): void {
+  ant.job = "forage";
   world.pheromones.food.add(ant.pos.x, ant.pos.y, CONFIG.foodPheromoneDeposit);
 
   moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world));
@@ -691,7 +965,21 @@ function moveFighting(world: World, ant: Ant): boolean {
 function stepUnderground(world: World, ant: Ant): void {
   maybeFeedUndergroundAnt(world, ant);
 
-  if (ant.state === "deposit") {
+  if (!isDugPos(world, ant.pos)) {
+    const nearest = findNearestDugTile(world, ant.pos);
+    if (nearest) {
+      ant.pos = tileCenter(nearest);
+    }
+  }
+
+  if (ant.state === "deposit" || ant.carrying > 0) {
+    if (!hasDugRoom(world, "storage") || !isDugPos(world, world.underground.storage)) {
+      ant.state = "deposit";
+      if (distance(ant.pos, world.underground.queenChamber) > CONFIG.undergroundNodeRadius) {
+        moveUndergroundToNode(world, ant, "queenChamber");
+      }
+      return;
+    }
     if (distance(ant.pos, world.underground.storage) <= CONFIG.undergroundNodeRadius) {
       world.underground.foodStorage += ant.carrying;
       world.fitness.totalFoodDeposited += ant.carrying;
@@ -701,6 +989,12 @@ function stepUnderground(world: World, ant: Ant): void {
       moveUndergroundToNode(world, ant, "storage");
     }
     return;
+  }
+
+  if (ant.state === "dig" || ant.state === "carryDirt" || ant.carryingDirt) {
+    if (moveDigging(world, ant)) {
+      return;
+    }
   }
 
   if (ant.state === "carryBrood") {
@@ -716,6 +1010,15 @@ function stepUnderground(world: World, ant: Ant): void {
   }
 
   if (assignNurseTask(world, ant)) {
+    return;
+  }
+
+  if (assignDigTask(world, ant)) {
+    return;
+  }
+
+  if (!hasDugRoom(world, "storage")) {
+    guardQueen(world, ant);
     return;
   }
 
@@ -745,6 +1048,16 @@ function stepSurface(world: World, ant: Ant): void {
   }
 
   if (moveFighting(world, ant)) {
+    return;
+  }
+
+  if (ant.state === "return" && ant.job === "nurse" && pendingBroodTransportCount(world) > 0) {
+    moveNurseHome(world, ant);
+    return;
+  }
+
+  if (ant.carrying <= 0 && needsSurfaceNurseReturn(world)) {
+    moveNurseHome(world, ant);
     return;
   }
 
