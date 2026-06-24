@@ -196,6 +196,10 @@ function nearestSpider(world: World, pos: Vec2): { index: number; distance: numb
     }
 
     const enemyDistance = distance(pos, enemy.pos);
+    if (enemyDistance > CONFIG.antSpiderSightRadius) {
+      return;
+    }
+
     if (enemyDistance < nearestDistance) {
       nearestDistance = enemyDistance;
       index = enemyIndex;
@@ -548,8 +552,12 @@ function moveSearching(world: World, ant: Ant): void {
   const gradient = world.pheromones.food.sampleGradient(ant.pos.x, ant.pos.y);
   const jitter = randomHeading();
   const gradientPower = Math.min(2.5, gradient.strength) * CONFIG.pheromoneGradientWeight;
+  const nearestFood = foodIndex >= 0 ? world.surface.foodSources[foodIndex] : null;
+  const nearestFoodDistance = nearestFood ? distance(ant.pos, nearestFood.pos) : Number.POSITIVE_INFINITY;
   const directFood =
-    foodIndex >= 0 ? normalize({ x: world.surface.foodSources[foodIndex].pos.x - ant.pos.x, y: world.surface.foodSources[foodIndex].pos.y - ant.pos.y }) : null;
+    nearestFood && nearestFoodDistance <= CONFIG.antFoodSightRadius
+      ? normalize({ x: nearestFood.pos.x - ant.pos.x, y: nearestFood.pos.y - ant.pos.y })
+      : null;
   const wanderWeight = directFood ? world.directives.forageWander * 0.35 : world.directives.forageWander;
   const direction = normalize({
     x: ant.heading.x * 0.35 + gradient.x * gradientPower + (directFood?.x ?? 0) * 1.4 + jitter.x * wanderWeight,

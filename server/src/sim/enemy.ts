@@ -118,8 +118,11 @@ function moveSpider(world: World, enemy: Enemy): void {
   const nearest = nearestSurfaceAnt(world, enemy);
   const underPressure = isSpiderUnderPressure(world, enemy);
   const hungry = enemy.hunger >= CONFIG.spiderHungryThreshold;
+  const atSafeLair = distance(enemy.pos, enemy.lair) <= CONFIG.spiderLairSafeRadius;
+  const desperateFeed = enemy.hunger >= CONFIG.spiderStarveThreshold * CONFIG.spiderDesperateFeedFactor;
+  const canFeedUnderPressure = (atSafeLair && enemy.hoard > 0) || desperateFeed;
   const canStore = enemy.carrying > 0 || (enemy.hoard < CONFIG.spiderHoardMax && hasAvailableCarrion(world));
-  if (hungry && (enemy.hoard > 0 || hasAvailableCarrion(world)) && !underPressure) {
+  if (hungry && (enemy.hoard > 0 || hasAvailableCarrion(world)) && (!underPressure || canFeedUnderPressure)) {
     spiderModes.set(enemy.id, { mode: "feed", repickAt: world.tick + 1 });
     applySpiderMode(world, enemy, "feed", genome);
     return;
