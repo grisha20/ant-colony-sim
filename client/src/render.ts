@@ -231,7 +231,8 @@ export function renderWorld(
   mode: ViewMode,
   viewportWidth = 900,
   viewportHeight = 760,
-  camera: Camera = { x: world.surface.entrance.x, y: world.surface.entrance.y, zoom: 1 }
+  camera: Camera = { x: world.surface.entrance.x, y: world.surface.entrance.y, zoom: 1 },
+  undergroundColonyIndex = 0
 ): void {
   ensureStage(stage);
 
@@ -243,7 +244,22 @@ export function renderWorld(
     return;
   }
 
-  renderUnderground(rendererState.underground, world, viewportWidth, viewportHeight);
+  renderUnderground(rendererState.underground, undergroundWorld(world, undergroundColonyIndex), viewportWidth, viewportHeight);
+}
+
+function undergroundWorld(world: WorldSnapshot, colonyIndex: number): WorldSnapshot {
+  const colony = world.colonies?.[colonyIndex];
+  if (!colony) {
+    return world;
+  }
+
+  const colonyAntIds = new Set(colony.ants.map((ant) => ant.id));
+  return {
+    ...world,
+    underground: colony.underground,
+    colony: colony.colony,
+    ants: world.ants.filter((ant) => colonyAntIds.has(ant.id))
+  };
 }
 
 export function surfaceTileFromGlobal(world: WorldSnapshot, globalX: number, globalY: number): Vec2 | null {
@@ -279,8 +295,7 @@ function renderSurface(
   const staticKey = [
     world.surface.width,
     world.surface.height,
-    world.surface.entrance.x,
-    world.surface.entrance.y,
+    ...(world.surface.entrances ?? [world.surface.entrance]).flatMap((entrance) => [entrance.x, entrance.y]),
     Math.floor(bounds.left),
     Math.ceil(bounds.right),
     Math.floor(bounds.top),
@@ -445,18 +460,27 @@ function updateSurfaceLairs(pool: SpritePool, world: WorldSnapshot, cell: number
   endPool(pool);
 }
 
-function drawSurfaceEntrance(root: Container, world: WorldSnapshot, cell: number): void {
-  const x = Math.round(world.surface.entrance.x * cell);
-  const y = Math.round(world.surface.entrance.y * cell);
+function drawSurfaceEntranceAt(root: Container, pos: Vec2, cell: number, color: "dark" | "red"): void {
+  const x = Math.round(pos.x * cell);
+  const y = Math.round(pos.y * cell);
   const entrance = new Graphics();
+  const mound = color === "red" ? 0x9a513f : 0x8d6a3e;
+  const soil = color === "red" ? 0x7d3b32 : 0x73502f;
 
-  entrance.rect(x - 25, y + 9, 50, 8).fill(0x8d6a3e);
-  entrance.rect(x - 18, y + 1, 36, 11).fill(0x73502f);
+  entrance.rect(x - 25, y + 9, 50, 8).fill(mound);
+  entrance.rect(x - 18, y + 1, 36, 11).fill(soil);
   entrance.rect(x - 14, y - 8, 28, 24).fill(0x2a1a12);
   entrance.rect(x - 8, y - 3, 16, 13).fill(0x0c0806);
-  entrance.rect(x - 21, y - 13, 8, 8).fill(0x9b7846);
-  entrance.rect(x + 13, y - 12, 9, 7).fill(0xa9814c);
+  entrance.rect(x - 21, y - 13, 8, 8).fill(mound);
+  entrance.rect(x + 13, y - 12, 9, 7).fill(mound);
   root.addChild(entrance);
+}
+
+function drawSurfaceEntrance(root: Container, world: WorldSnapshot, cell: number): void {
+  const entrances = world.surface.entrances ?? [world.surface.entrance];
+  entrances.forEach((entrance, index) => {
+    drawSurfaceEntranceAt(root, entrance, cell, index === 1 ? "red" : "dark");
+  });
 }
 
 function updateSurfaceAnts(pool: SpritePool, world: WorldSnapshot, cell: number, bounds: ViewBounds): void {
@@ -474,6 +498,7 @@ function updateSurfaceAnts(pool: SpritePool, world: WorldSnapshot, cell: number,
     const sprite = acquireSprite(pool);
     sprite.texture = getAntTexture(carrying);
     sprite.scale.set(ant.state === "carry" ? 2.8 : 2.45);
+    sprite.tint = ant.colonyId === "colony-2" ? 0xd94a3f : 0xffffff;
     placeSprite(sprite, ant.pos.x * cell, ant.pos.y * cell, antRotation(ant));
   }
 
@@ -654,7 +679,18 @@ function updateUndergroundBrood(pool: SpritePool, world: WorldSnapshot): void {
     const pos = broodPosition(brood, world, index);
     sprite.texture = brood.stage === "egg" ? getEggTexture() : getLarvaTexture();
     sprite.scale.set(brood.carriedBy ? 2.2 : brood.stage === "egg" ? 3 : 3.2);
+    sprite.tint = brood.isPrincess ? 0xf0c14b : 0xffffff;
     placeSprite(sprite, pos.x, pos.y, brood.stage === "larva" ? 0.08 : 0);
+  });
+
+  world.underground.princesses.forEach((princess, index) => {
+    const sprite = acquireSprite(pool);
+    const pos = undergroundToScreen(world, princess.pos);
+    const offset = deterministicOffset(index + princess.id.length, 28);
+    sprite.texture = getLarvaTexture();
+    sprite.scale.set(3.5);
+    sprite.tint = 0xf0c14b;
+    placeSprite(sprite, pos.x + offset.x * 0.35, pos.y + offset.y * 0.22, 0.08);
   });
 
   endPool(pool);
@@ -698,6 +734,7 @@ function updateUndergroundAnts(pool: SpritePool, world: WorldSnapshot): void {
     const sprite = acquireSprite(pool);
     sprite.texture = getAntTexture(carrying);
     sprite.scale.set(2.6);
+    sprite.tint = ant.colonyId === "colony-2" ? 0xd94a3f : 0xffffff;
     placeSprite(sprite, pos.x, pos.y, ant.state === "deposit" ? 0 : antRotation(ant));
   }
 

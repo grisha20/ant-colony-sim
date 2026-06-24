@@ -163,6 +163,11 @@ function isColonyStarving(world: World): boolean {
   return surfaceFood <= CONFIG.starveFoodThreshold && world.underground.foodStorage <= world.directives.spiderAttackStorage;
 }
 
+function isColonyWarHungry(world: World): boolean {
+  const surfaceFood = world.surface.foodSources.reduce((total, source) => total + Math.max(0, source.amount), 0);
+  return surfaceFood <= CONFIG.starveFoodThreshold && world.underground.foodStorage <= CONFIG.warHungerThreshold;
+}
+
 function hasAvailableSurfaceFood(world: World): boolean {
   return world.surface.foodSources.some((source) => source.amount > 0);
 }
@@ -250,6 +255,72 @@ function activeSurfaceForagers(world: World): number {
   return world.ants.filter(
     (ant) => ant.layer === "surface" && ant.state !== "dead" && ant.carrying <= 0 && ant.state !== "fight"
   ).length;
+}
+
+function enemyColonyAnts(world: World, ant: Ant): Ant[] {
+  return (world.colonies ?? [])
+    .filter((colony) => colony.id !== ant.colonyId)
+    .flatMap((colony) => colony.ants)
+    .filter((other) => other.layer === "surface" && other.state !== "dead");
+}
+
+function nearestEnemyAnt(world: World, ant: Ant): { ant: Ant; distance: number } | null {
+  let nearest: { ant: Ant; distance: number } | null = null;
+  for (const enemy of enemyColonyAnts(world, ant)) {
+    const enemyDistance = distance(ant.pos, enemy.pos);
+    if (!nearest || enemyDistance < nearest.distance) {
+      nearest = { ant: enemy, distance: enemyDistance };
+    }
+  }
+  return nearest;
+}
+
+function nearestEnemyNest(world: World, ant: Ant): Vec2 | null {
+  let nearest: { pos: Vec2; distance: number } | null = null;
+  for (const colony of world.colonies ?? []) {
+    if (colony.id === ant.colonyId) {
+      continue;
+    }
+    const nestDistance = distance(ant.pos, colony.surfaceEntrance);
+    if (!nearest || nestDistance < nearest.distance) {
+      nearest = { pos: colony.surfaceEntrance, distance: nestDistance };
+    }
+  }
+  return nearest?.pos ?? null;
+}
+
+function handleEnemyColonyCombat(world: World, ant: Ant): boolean {
+  if (ant.carrying > 0 || ant.layer !== "surface") {
+    return false;
+  }
+
+  const nearest = nearestEnemyAnt(world, ant);
+  if (nearest && nearest.distance <= CONFIG.antCombatRadius) {
+    ant.state = "fight";
+    ant.heading = normalize({ x: nearest.ant.pos.x - ant.pos.x, y: nearest.ant.pos.y - ant.pos.y });
+    nearest.ant.energy -= CONFIG.antVsAntDamage;
+    ant.energy -= CONFIG.antVsAntDamage * 0.55;
+    if (nearest.ant.energy <= 0) {
+      nearest.ant.state = "dead";
+    }
+    if (ant.energy <= 0) {
+      ant.state = "dead";
+    }
+    return true;
+  }
+
+  if (!isColonyWarHungry(world)) {
+    return false;
+  }
+
+  const target = nearest?.ant.pos ?? nearestEnemyNest(world, ant);
+  if (!target) {
+    return false;
+  }
+
+  ant.state = "fight";
+  moveSurfaceToward(world, ant, target, false);
+  return true;
 }
 
 function shouldReturnFromSurface(world: World, ant: Ant): boolean {
@@ -591,6 +662,10 @@ function stepUnderground(world: World, ant: Ant): void {
 }
 
 function stepSurface(world: World, ant: Ant): void {
+  if (handleEnemyColonyCombat(world, ant)) {
+    return;
+  }
+
   if (ant.state === "carry") {
     moveCarrying(world, ant);
     return;
@@ -619,6 +694,10 @@ function stepSurface(world: World, ant: Ant): void {
 }
 
 export function stepAnt(world: World, ant: Ant): void {
+  if (ant.state === "dead") {
+    return;
+  }
+
   ant.energy -= CONFIG.energyDrainPerTick;
 
   if (ant.energy <= 0) {

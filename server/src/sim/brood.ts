@@ -64,7 +64,7 @@ export function updateBrood(world: World): void {
         }
         matureBroodIds.add(brood.id);
       } else if (brood.progress >= growthNeeded && world.ants.length < world.colony.nestCapacity) {
-        const worker = createWorkerAnt(world.underground.nursery, "underground");
+        const worker = createWorkerAnt(world.underground.nursery, "underground", world.colony.id);
         worker.energy = CONFIG.maxEnergy;
         world.ants.push(worker);
         matureBroodIds.add(brood.id);

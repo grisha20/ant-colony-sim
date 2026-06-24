@@ -184,9 +184,9 @@ export function recordAndEvolve(state: GenomeState, genome: Genome, fitness: num
   return state.current;
 }
 
-export async function loadGenome(): Promise<GenomeState> {
+export async function loadGenome(file = CONFIG.genomeFile): Promise<GenomeState> {
   try {
-    const raw = await readFile(CONFIG.genomeFile, "utf8");
+    const raw = await readFile(file, "utf8");
     const parsed = JSON.parse(raw) as Partial<GenomeState>;
     const archive = sortAndTrimArchive(
       (parsed.archive ?? [])
@@ -222,14 +222,14 @@ export async function loadGenome(): Promise<GenomeState> {
       archive: [],
       generationsRun: 0
     };
-    await saveGenome(state);
+    await saveGenome(state, file);
     return state;
   }
 }
 
-export async function saveGenome(state: GenomeState): Promise<void> {
+export async function saveGenome(state: GenomeState, file = CONFIG.genomeFile): Promise<void> {
   state.archive = sortAndTrimArchive(state.archive);
   syncBestFromArchive(state);
-  await mkdir(path.dirname(CONFIG.genomeFile), { recursive: true });
-  await writeFile(CONFIG.genomeFile, JSON.stringify(state, null, 2), "utf8");
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, JSON.stringify(state, null, 2), "utf8");
 }

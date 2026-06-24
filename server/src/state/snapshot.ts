@@ -8,12 +8,13 @@ import type { WorldSnapshot } from "../../../shared/types";
 
 export async function loadWorldSnapshot(
   genomeState: GenomeState,
-  spiderGenomeState: SpiderGenomeState
+  spiderGenomeState: SpiderGenomeState,
+  genomeStateB: GenomeState = genomeState
 ): Promise<World | null> {
   try {
     const raw = await readFile(CONFIG.snapshotFile, "utf8");
     const snapshot = JSON.parse(raw) as WorldSnapshot;
-    return worldFromSnapshot(snapshot, genomeState, spiderGenomeState);
+    return worldFromSnapshot(snapshot, genomeState, spiderGenomeState, genomeStateB);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT") {

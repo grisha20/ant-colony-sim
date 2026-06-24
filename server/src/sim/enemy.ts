@@ -44,7 +44,7 @@ function randomLairPoint(): Vec2 {
             : { x: Math.random() * CONFIG.mapWidth, y: CONFIG.mapHeight - Math.random() * margin }
     );
 
-    if (distance(pos, CONFIG.surfaceEntrance) >= minNestDistance) {
+    if (distance(pos, CONFIG.surfaceEntrance) >= minNestDistance && distance(pos, CONFIG.surfaceEntranceB) >= minNestDistance) {
       return pos;
     }
   }
@@ -286,6 +286,21 @@ function updateSpiderStarvation(enemy: Enemy): boolean {
   return next >= CONFIG.spiderStarveBuffer;
 }
 
+function creditSpiderKill(world: World, enemy: Enemy): void {
+  const fighters = world.ants.filter(
+    (ant) => ant.layer === "surface" && ant.state === "fight" && distance(ant.pos, enemy.pos) <= CONFIG.defenseRadius
+  );
+  const creditedColonies = new Set(fighters.map((ant) => ant.colonyId));
+  for (const colony of world.colonies ?? []) {
+    if (creditedColonies.has(colony.id)) {
+      colony.fitness.spidersKilled += 1;
+    }
+  }
+  if (creditedColonies.size === 0) {
+    world.fitness.spidersKilled += 1;
+  }
+}
+
 export function updateEnemies(world: World): void {
   if (world.enemies.length === 0) {
     if (spiderRespawnTick === null) {
@@ -341,7 +356,7 @@ export function updateEnemies(world: World): void {
     if (enemy.hp <= 0) {
       deadEnemies.add(enemy.id);
       addFoodSource(world, enemy.pos.x, enemy.pos.y, CONFIG.spiderCarcassFood);
-      world.fitness.spidersKilled += 1;
+      creditSpiderKill(world, enemy);
       evolveSpiderGeneration(world);
       spiderRespawnTick = world.tick + CONFIG.spiderRespawnTicks;
     } else if (starved) {

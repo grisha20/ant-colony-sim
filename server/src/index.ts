@@ -7,9 +7,10 @@ import { addFoodSource, createWorld, toSnapshot } from "./sim/world";
 import { startLoop, type LoopController } from "./loop";
 
 const genomeState = await loadGenome();
+const genomeStateB = await loadGenome(CONFIG.genomeFileB);
 const spiderGenomeState = await loadSpiderGenome();
-const loadedWorld = await loadWorldSnapshot(genomeState, spiderGenomeState);
-const world = loadedWorld ?? createWorld(genomeState, spiderGenomeState);
+const loadedWorld = await loadWorldSnapshot(genomeState, spiderGenomeState, genomeStateB);
+const world = loadedWorld ?? createWorld(genomeState, spiderGenomeState, genomeStateB);
 
 let loop: LoopController;
 const hub = createSocketHub(CONFIG.wsPort, () => toSnapshot(world), (command) => {

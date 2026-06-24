@@ -2,6 +2,7 @@ import type { Colony } from "../../../shared/types";
 import { CONFIG } from "../config";
 
 export function createColony(
+  id: string,
   generation: number,
   generationsRun: number,
   bestFitness: number,
@@ -9,7 +10,7 @@ export function createColony(
   spiderGenerationsRun: number
 ): Colony {
   return {
-    id: "colony-1",
+    id,
     food: CONFIG.startingFoodStorage,
     population: {
       workers: CONFIG.startingWorkers,

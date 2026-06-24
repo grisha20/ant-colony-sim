@@ -1,11 +1,18 @@
-import { CONFIG } from "../config";
 import { computeDirectives, createFitnessState, updateFitness } from "../ai/controller";
 import { recordAndEvolve, saveGenome } from "../ai/genome";
+import { CONFIG } from "../config";
 import { stepAnt } from "./ant";
 import { updateBrood, updateQueen } from "./brood";
-import { syncColonyStats } from "./colony";
 import { updateEnemies } from "./enemy";
-import { respawnCarrion, restartColony, type World } from "./world";
+import {
+  colonyWorldView,
+  createColonyRuntime,
+  respawnCarrion,
+  syncColonyStatsForRuntime,
+  syncWorldLegacyFields,
+  type ColonyRuntime,
+  type World
+} from "./world";
 
 function scentFoodSources(world: World): void {
   for (const source of world.surface.foodSources) {
@@ -24,30 +31,38 @@ function scentFoodSources(world: World): void {
   }
 }
 
-function removeDeadAndSyncLayerLists(world: World): void {
-  world.ants = world.ants.filter((ant) => ant.state !== "dead");
-  world.underground.ants = world.ants.filter((ant) => ant.layer === "underground").map((ant) => ant.id);
+function removeDeadAndSyncLayerLists(colony: ColonyRuntime): void {
+  colony.ants = colony.ants.filter((ant) => ant.state !== "dead");
+  colony.underground.ants = colony.ants.filter((ant) => ant.layer === "underground").map((ant) => ant.id);
 }
 
-function recordReignAndEvolve(world: World): void {
-  world.genomeState.generationsRun += 1;
-  recordAndEvolve(world.genomeState, world.genomeState.current, world.fitness.score);
-  saveGenome(world.genomeState).catch((error: unknown) => {
+function genomeFileForColony(colony: ColonyRuntime): string {
+  return colony.id === "colony-2" ? CONFIG.genomeFileB : CONFIG.genomeFile;
+}
+
+function recordReignAndEvolve(world: World, colony: ColonyRuntime): void {
+  colony.genomeState.generationsRun += 1;
+  recordAndEvolve(colony.genomeState, colony.genomeState.current, colony.fitness.score);
+  saveGenome(colony.genomeState, genomeFileForColony(colony)).catch((error: unknown) => {
     console.warn(`Could not save genome: ${(error as Error).message}`);
   });
-  world.colony.generation = world.genomeState.current.generation;
-  world.colony.generationsRun = world.genomeState.generationsRun;
-  world.colony.bestFitness = world.genomeState.bestFitness;
+  colony.colony.generation = colony.genomeState.current.generation;
+  colony.colony.generationsRun = colony.genomeState.generationsRun;
+  colony.colony.bestFitness = colony.genomeState.bestFitness;
+
+  if (world.colonies[0] === colony) {
+    world.genomeState = colony.genomeState;
+  }
 }
 
-function promotePrincess(world: World): boolean {
-  const princess = world.underground.princesses.shift();
+function promotePrincess(world: World, colony: ColonyRuntime): boolean {
+  const princess = colony.underground.princesses.shift();
   if (!princess) {
     return false;
   }
 
-  world.underground.queen = {
-    pos: { ...world.underground.queenChamber },
+  colony.underground.queen = {
+    pos: { ...colony.underground.queenChamber },
     alive: true,
     layCooldown: CONFIG.broodLayCooldownTicks,
     starve: 0,
@@ -55,62 +70,61 @@ function promotePrincess(world: World): boolean {
     hp: CONFIG.queenMaxHp,
     age: 0
   };
-  world.fitness = createFitnessState();
-  world.directives = computeDirectives(world, world.genomeState.current);
+  colony.fitness = createFitnessState();
+  colony.directives = computeDirectives(colonyWorldView(world, colony), colony.genomeState.current);
   return true;
 }
 
-function evolveAfterQueenDeath(world: World): boolean {
-  if (world.underground.queen.alive) {
-    return false;
+function restartColonyRuntime(world: World, colony: ColonyRuntime): void {
+  const fresh = createColonyRuntime(
+    colony.id,
+    colony.color,
+    colony.surfaceEntrance,
+    colony.genomeState,
+    world.spiderGenomeState
+  );
+  Object.assign(colony, fresh);
+}
+
+function evolveAfterQueenDeath(world: World, colony: ColonyRuntime): void {
+  if (colony.underground.queen.alive) {
+    return;
   }
 
-  recordReignAndEvolve(world);
-  if (promotePrincess(world)) {
-    return false;
+  recordReignAndEvolve(world, colony);
+  if (!promotePrincess(world, colony)) {
+    restartColonyRuntime(world, colony);
   }
-
-  restartColony(world);
-  return true;
 }
 
 export function step(world: World): void {
   world.tick += 1;
-  world.directives = computeDirectives(world, world.genomeState.current);
 
   respawnCarrion(world);
   scentFoodSources(world);
 
-  for (const ant of world.ants) {
-    stepAnt(world, ant);
+  for (const colony of world.colonies) {
+    const scopedWorld = colonyWorldView(world, colony);
+    colony.directives = computeDirectives(scopedWorld, colony.genomeState.current);
+    for (const ant of colony.ants) {
+      stepAnt(scopedWorld, ant);
+    }
   }
 
+  syncWorldLegacyFields(world);
   updateEnemies(world);
-  updateQueen(world);
-  updateBrood(world);
-  removeDeadAndSyncLayerLists(world);
-  updateFitness(world);
 
-  if (evolveAfterQueenDeath(world)) {
-    return;
+  for (const colony of world.colonies) {
+    const scopedWorld = colonyWorldView(world, colony);
+    updateQueen(scopedWorld);
+    updateBrood(scopedWorld);
+    removeDeadAndSyncLayerLists(colony);
+    updateFitness(scopedWorld);
+    evolveAfterQueenDeath(world, colony);
+    syncColonyStatsForRuntime(colony);
+    colony.homePheromone.evaporateAndDiffuse(CONFIG.pheromoneEvaporation, CONFIG.pheromoneDiffusion);
   }
 
   world.pheromones.food.evaporateAndDiffuse(CONFIG.pheromoneEvaporation, CONFIG.pheromoneDiffusion);
-  world.pheromones.home.evaporateAndDiffuse(CONFIG.pheromoneEvaporation, CONFIG.pheromoneDiffusion);
-
-  syncColonyStats(
-    world.colony,
-    world.ants.length,
-    world.underground.brood.filter((brood) => brood.stage === "egg").length,
-    world.underground.brood.filter((brood) => brood.stage === "larva").length,
-    world.underground.foodStorage,
-    world.underground.queen.alive,
-    world.underground.queen.stress,
-    world.underground.queen.age,
-    world.underground.princesses.length,
-    world.genomeState.bestFitness,
-    world.spiderGenomeState.current.generation,
-    world.genomeState.generationsRun,
-    world.spiderGenomeState.generationsRun
-  );
+  syncWorldLegacyFields(world);
 }

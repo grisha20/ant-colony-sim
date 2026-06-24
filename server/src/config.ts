@@ -18,14 +18,18 @@ export const CONFIG = {
   genomeFile:
     process.env.GENOME_FILE ??
     path.resolve(process.cwd(), cwdName === "server" ? ".." : ".", "genome.json"),
+  genomeFileB:
+    process.env.GENOME_FILE_B ??
+    path.resolve(process.cwd(), cwdName === "server" ? ".." : ".", "genome-b.json"),
   spiderGenomeFile:
     process.env.SPIDER_GENOME_FILE ??
     path.resolve(process.cwd(), cwdName === "server" ? ".." : ".", "spider_genome.json"),
 
   // Surface is the only true grid in the first step.
-  mapWidth: 240,
-  mapHeight: 150,
-  surfaceEntrance: { x: 120, y: 75 },
+  mapWidth: 340,
+  mapHeight: 210,
+  surfaceEntrance: { x: 85, y: 105 },
+  surfaceEntranceB: { x: 255, y: 105 },
 
   // Underground is a fixed room scene, not a grid.
   undergroundWidth: 100,
@@ -64,6 +68,9 @@ export const CONFIG = {
   antMobCount: 6,
   antMobSpeedBonus: 0.3,
   antMobCountThreshold: 3,
+  antVsAntDamage: 2.6,
+  antCombatRadius: 1.4,
+  warHungerThreshold: 10,
   comfortableStorage: 120,
   minForagers: 6,
   maxForagers: 16,

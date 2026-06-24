@@ -19,6 +19,10 @@ appRoot.innerHTML = `
         <button class="active" data-view="surface" type="button">Поверхность</button>
         <button data-view="underground" type="button">Подземелье</button>
       </div>
+      <div class="segmented nestControls" aria-label="Гнездо">
+        <button class="active" data-nest="0" type="button">Гнездо A</button>
+        <button data-nest="1" type="button">Гнездо B</button>
+      </div>
       <div class="segmented speedControls" aria-label="Скорость">
         <button class="active" data-speed="1" type="button">1x</button>
         <button data-speed="5" type="button">5x</button>
@@ -32,20 +36,40 @@ appRoot.innerHTML = `
       </div>
     </section>
     <aside class="panel hud">
-      <div><span>Тик</span><strong id="tick">0</strong></div>
-      <div><span>Поколение</span><strong id="generation">1</strong></div>
-      <div><span>Поколений (колония)</span><strong id="generations-run">0</strong></div>
-      <div><span>Поколение паука</span><strong id="spider-generation">1</strong></div>
-      <div><span>Поколений (паук)</span><strong id="spider-generations-run">0</strong></div>
-      <div><span>Лучш. фитнес</span><strong id="best-fitness">0</strong></div>
-      <div><span>Склад</span><strong id="storage">0</strong></div>
-      <div><span>Рабочие</span><strong id="workers">0</strong></div>
-      <div><span>Яйца</span><strong id="eggs">0</strong></div>
-      <div><span>Личинки</span><strong id="larvae">0</strong></div>
-      <div><span>Матка</span><strong id="queen">жива</strong></div>
-      <div><span>Стресс матки</span><strong id="queen-stress">0</strong></div>
-      <div><span>Возраст матки</span><strong id="queen-age">0</strong></div>
-      <div><span>Принцессы</span><strong id="princesses">0</strong></div>
+      <div class="hudCommon">
+        <div><span>Тик</span><strong id="tick">0</strong></div>
+        <div><span>Паук</span><strong id="spider-generation">G1</strong></div>
+        <div><span>Поколений паука</span><strong id="spider-generations-run">0</strong></div>
+        <div><span>Лучш. фитнес</span><strong id="best-fitness">0</strong></div>
+      </div>
+      <div class="colonyGrid">
+        <section class="colonyStats colonyA">
+          <h2>Колония A</h2>
+          <div><span>Поколение</span><strong id="colony-a-generation">1</strong></div>
+          <div><span>Поколений</span><strong id="colony-a-generations-run">0</strong></div>
+          <div><span>Рабочие</span><strong id="colony-a-workers">0</strong></div>
+          <div><span>Склад</span><strong id="colony-a-storage">0</strong></div>
+          <div><span>Яйца</span><strong id="colony-a-eggs">0</strong></div>
+          <div><span>Личинки</span><strong id="colony-a-larvae">0</strong></div>
+          <div><span>Матка</span><strong id="colony-a-queen">жива</strong></div>
+          <div><span>Стресс</span><strong id="colony-a-stress">0</strong></div>
+          <div><span>Возраст</span><strong id="colony-a-age">0</strong></div>
+          <div><span>Принцессы</span><strong id="colony-a-princesses">0</strong></div>
+        </section>
+        <section class="colonyStats colonyB">
+          <h2>Колония B</h2>
+          <div><span>Поколение</span><strong id="colony-b-generation">1</strong></div>
+          <div><span>Поколений</span><strong id="colony-b-generations-run">0</strong></div>
+          <div><span>Рабочие</span><strong id="colony-b-workers">0</strong></div>
+          <div><span>Склад</span><strong id="colony-b-storage">0</strong></div>
+          <div><span>Яйца</span><strong id="colony-b-eggs">0</strong></div>
+          <div><span>Личинки</span><strong id="colony-b-larvae">0</strong></div>
+          <div><span>Матка</span><strong id="colony-b-queen">жива</strong></div>
+          <div><span>Стресс</span><strong id="colony-b-stress">0</strong></div>
+          <div><span>Возраст</span><strong id="colony-b-age">0</strong></div>
+          <div><span>Принцессы</span><strong id="colony-b-princesses">0</strong></div>
+        </section>
+      </div>
     </aside>
     <footer class="panel status">
       <span id="status">Подключение к ws://localhost:8787</span>
@@ -163,22 +187,61 @@ style.textContent = `
     margin-left: auto;
   }
 
+  .nestControls {
+    display: none;
+  }
+
+  .app.undergroundView .nestControls {
+    display: grid;
+  }
+
   .hud {
     right: 14px;
     top: 82px;
-    width: min(260px, calc(100vw - 28px));
+    width: min(560px, calc(100vw - 28px));
     padding: 12px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .hudCommon,
+  .colonyGrid {
     display: grid;
     gap: 8px;
   }
 
-  .hud div {
+  .hudCommon {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .colonyGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hudCommon div,
+  .colonyStats div {
     min-height: 28px;
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 14px;
     border-bottom: 1px solid rgb(245 248 239 / 0.12);
+  }
+
+  .colonyStats {
+    min-width: 0;
+  }
+
+  .colonyStats h2 {
+    margin: 0 0 4px;
+    font-size: 14px;
+    line-height: 1.2;
+    letter-spacing: 0;
+    color: #fffbea;
+  }
+
+  .colonyB h2 {
+    color: #ffb4aa;
   }
 
   .hud span {
@@ -188,8 +251,9 @@ style.textContent = `
 
   .hud strong {
     color: #fffbea;
-    font-size: 18px;
+    font-size: 16px;
     letter-spacing: 0;
+    text-align: right;
   }
 
   .status {
@@ -219,6 +283,11 @@ style.textContent = `
       margin-left: 0;
     }
 
+    .hudCommon,
+    .colonyGrid {
+      grid-template-columns: 1fr;
+    }
+
     .hud {
       top: auto;
       bottom: 58px;
@@ -230,62 +299,65 @@ style.textContent = `
 document.head.appendChild(style);
 
 const canvasHost = document.querySelector<HTMLDivElement>("#canvas-host");
+const appShell = document.querySelector<HTMLElement>(".app");
 const status = document.querySelector<HTMLElement>("#status");
 const viewButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-view]"));
+const nestButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-nest]"));
 const speedButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-speed]"));
 const cameraButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-camera]"));
 const tick = document.querySelector<HTMLElement>("#tick");
-const generation = document.querySelector<HTMLElement>("#generation");
-const generationsRun = document.querySelector<HTMLElement>("#generations-run");
 const spiderGeneration = document.querySelector<HTMLElement>("#spider-generation");
 const spiderGenerationsRun = document.querySelector<HTMLElement>("#spider-generations-run");
 const bestFitness = document.querySelector<HTMLElement>("#best-fitness");
-const storage = document.querySelector<HTMLElement>("#storage");
-const workers = document.querySelector<HTMLElement>("#workers");
-const eggs = document.querySelector<HTMLElement>("#eggs");
-const larvae = document.querySelector<HTMLElement>("#larvae");
-const queen = document.querySelector<HTMLElement>("#queen");
-const queenStress = document.querySelector<HTMLElement>("#queen-stress");
-const queenAge = document.querySelector<HTMLElement>("#queen-age");
-const princesses = document.querySelector<HTMLElement>("#princesses");
+
+const colonyNodes = [0, 1].map((index) => {
+  const key = index === 0 ? "a" : "b";
+  return {
+    generation: document.querySelector<HTMLElement>(`#colony-${key}-generation`),
+    generationsRun: document.querySelector<HTMLElement>(`#colony-${key}-generations-run`),
+    workers: document.querySelector<HTMLElement>(`#colony-${key}-workers`),
+    storage: document.querySelector<HTMLElement>(`#colony-${key}-storage`),
+    eggs: document.querySelector<HTMLElement>(`#colony-${key}-eggs`),
+    larvae: document.querySelector<HTMLElement>(`#colony-${key}-larvae`),
+    queen: document.querySelector<HTMLElement>(`#colony-${key}-queen`),
+    stress: document.querySelector<HTMLElement>(`#colony-${key}-stress`),
+    age: document.querySelector<HTMLElement>(`#colony-${key}-age`),
+    princesses: document.querySelector<HTMLElement>(`#colony-${key}-princesses`)
+  };
+});
 
 if (
   !canvasHost ||
+  !appShell ||
   !status ||
   !tick ||
-  !generation ||
-  !generationsRun ||
   !spiderGeneration ||
   !spiderGenerationsRun ||
   !bestFitness ||
-  !storage ||
-  !workers ||
-  !eggs ||
-  !larvae ||
-  !queen ||
-  !queenStress ||
-  !queenAge ||
-  !princesses
+  colonyNodes.some((nodes) => Object.values(nodes).some((node) => !node))
 ) {
   throw new Error("Missing UI nodes");
 }
 
 const canvasHostNode = canvasHost;
+const appShellNode = appShell;
 const statusNode = status;
 const tickNode = tick;
-const generationNode = generation;
-const generationsRunNode = generationsRun;
 const spiderGenerationNode = spiderGeneration;
 const spiderGenerationsRunNode = spiderGenerationsRun;
 const bestFitnessNode = bestFitness;
-const storageNode = storage;
-const workersNode = workers;
-const eggsNode = eggs;
-const larvaeNode = larvae;
-const queenNode = queen;
-const queenStressNode = queenStress;
-const queenAgeNode = queenAge;
-const princessesNode = princesses;
+const colonyStatNodes = colonyNodes.map((nodes) => ({
+  generation: nodes.generation as HTMLElement,
+  generationsRun: nodes.generationsRun as HTMLElement,
+  workers: nodes.workers as HTMLElement,
+  storage: nodes.storage as HTMLElement,
+  eggs: nodes.eggs as HTMLElement,
+  larvae: nodes.larvae as HTMLElement,
+  queen: nodes.queen as HTMLElement,
+  stress: nodes.stress as HTMLElement,
+  age: nodes.age as HTMLElement,
+  princesses: nodes.princesses as HTMLElement
+}));
 
 const SURFACE_TILE_SIZE = 8;
 const MIN_ZOOM = 0.45;
@@ -304,6 +376,7 @@ type AntInterp = {
 };
 
 let currentView: ViewMode = "surface";
+let currentUndergroundColony = 0;
 let cameraMode: CameraMode = "follow";
 let currentSpeed = 1;
 let camera: Camera = { x: 50, y: 50, zoom: 1 };
@@ -346,6 +419,13 @@ function setCameraMode(mode: CameraMode): void {
   }
 }
 
+function setUndergroundColony(index: number): void {
+  currentUndergroundColony = clamp(index, 0, 1);
+  for (const button of nestButtons) {
+    button.classList.toggle("active", Number(button.dataset.nest) === currentUndergroundColony);
+  }
+}
+
 function lerpAngle(a: number, b: number, t: number): number {
   let diff = b - a;
   while (diff > Math.PI) diff -= Math.PI * 2;
@@ -363,19 +443,41 @@ canvasHost.appendChild(pixi.canvas);
 
 function updateHud(world: WorldSnapshot): void {
   tickNode.textContent = String(world.tick);
-  generationNode.textContent = String(world.colony.generation);
-  generationsRunNode.textContent = String(world.colony.generationsRun);
-  spiderGenerationNode.textContent = String(world.colony.spiderGeneration);
+  spiderGenerationNode.textContent = `G${world.colony.spiderGeneration}`;
   spiderGenerationsRunNode.textContent = String(world.colony.spiderGenerationsRun);
-  bestFitnessNode.textContent = String(Math.round(world.colony.bestFitness));
-  storageNode.textContent = String(Math.floor(world.underground.foodStorage));
-  workersNode.textContent = String(world.colony.population.workers);
-  eggsNode.textContent = String(world.colony.population.eggs);
-  larvaeNode.textContent = String(world.colony.population.larvae ?? 0);
-  queenNode.textContent = world.colony.queenAlive ? "жива" : "погибла";
-  queenStressNode.textContent = String(Math.round(world.colony.queenStress ?? 0));
-  queenAgeNode.textContent = String(Math.floor(world.colony.queenAge ?? 0));
-  princessesNode.textContent = String(world.colony.princesses ?? 0);
+
+  const colonies = world.colonies?.length
+    ? world.colonies
+    : [{ colony: world.colony, underground: world.underground }];
+  bestFitnessNode.textContent = String(Math.round(Math.max(...colonies.map((item) => item.colony.bestFitness))));
+
+  colonyStatNodes.forEach((nodes, index) => {
+    const item = colonies[index];
+    if (!item) {
+      nodes.generation.textContent = "-";
+      nodes.generationsRun.textContent = "-";
+      nodes.workers.textContent = "-";
+      nodes.storage.textContent = "-";
+      nodes.eggs.textContent = "-";
+      nodes.larvae.textContent = "-";
+      nodes.queen.textContent = "-";
+      nodes.stress.textContent = "-";
+      nodes.age.textContent = "-";
+      nodes.princesses.textContent = "-";
+      return;
+    }
+
+    nodes.generation.textContent = String(item.colony.generation);
+    nodes.generationsRun.textContent = String(item.colony.generationsRun);
+    nodes.workers.textContent = String(item.colony.population.workers);
+    nodes.storage.textContent = String(Math.floor(item.underground.foodStorage));
+    nodes.eggs.textContent = String(item.colony.population.eggs);
+    nodes.larvae.textContent = String(item.colony.population.larvae ?? 0);
+    nodes.queen.textContent = item.colony.queenAlive ? "жива" : "погибла";
+    nodes.stress.textContent = String(Math.round(item.colony.queenStress ?? 0));
+    nodes.age.textContent = String(Math.floor(item.colony.queenAge ?? 0));
+    nodes.princesses.textContent = String(item.colony.princesses ?? 0);
+  });
 }
 
 function draw(interpT: number): void {
@@ -400,16 +502,31 @@ function draw(interpT: number): void {
     return { ...ant, pos: { x, y }, heading: { x: Math.cos(angle), y: Math.sin(angle) } };
   });
 
-  renderWorld(pixi.stage, { ...latestWorld, ants }, currentView, pixi.screen.width, pixi.screen.height, camera);
+  renderWorld(
+    pixi.stage,
+    { ...latestWorld, ants },
+    currentView,
+    pixi.screen.width,
+    pixi.screen.height,
+    camera,
+    currentUndergroundColony
+  );
   updateHud(latestWorld);
 }
 
 for (const button of viewButtons) {
   button.addEventListener("click", () => {
     currentView = button.dataset.view as ViewMode;
+    appShellNode.classList.toggle("undergroundView", currentView === "underground");
     for (const item of viewButtons) {
       item.classList.toggle("active", item === button);
     }
+  });
+}
+
+for (const button of nestButtons) {
+  button.addEventListener("click", () => {
+    setUndergroundColony(Number(button.dataset.nest ?? 0));
   });
 }
 

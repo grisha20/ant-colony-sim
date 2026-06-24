@@ -118,6 +118,7 @@ export type Surface = {
   width: number;
   height: number;
   entrance: Vec2;
+  entrances: Vec2[];
   foodSources: FoodSource[];
   carrion: FoodSource[];
 };
@@ -134,6 +135,13 @@ export type WorldSnapshot = {
   surface: Surface;
   underground: Underground;
   colony: Colony;
+  colonies: Array<{
+    id: string;
+    color: "dark" | "red";
+    underground: Underground;
+    colony: Colony;
+    ants: Ant[];
+  }>;
   ants: Ant[];
   enemies: Enemy[];
   pheromones: PheromoneSnapshot;
