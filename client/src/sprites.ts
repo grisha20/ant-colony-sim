@@ -64,6 +64,13 @@ const midAnt = 0x402019;
 const antHighlight = 0x6a3a27;
 const foodYellow = 0xe6c45a;
 
+const redAntDark = 0x5a1210;
+const redAntMid = 0xa62b1b;
+const redAntHighlight = 0xd95d4e;
+
+const redQueenDark = 0x55120d;
+const redQueenMid = 0x9e3b2b;
+
 export const spriteMaps = {
   ant: [
     "..1..1......",
@@ -151,14 +158,28 @@ export const spritePalettes = {
     "2": midAnt,
     "3": antHighlight
   },
+  antRed: {
+    "1": redAntDark,
+    "2": redAntMid,
+    "3": redAntHighlight
+  },
   antCarry: {
     "1": darkAnt,
     "2": midAnt,
     "3": foodYellow
   },
+  antCarryRed: {
+    "1": redAntDark,
+    "2": redAntMid,
+    "3": foodYellow
+  },
   queen: {
     "1": 0x26130f,
     "2": 0x5a2b22
+  },
+  queenRed: {
+    "1": redQueenDark,
+    "2": redQueenMid
   },
   egg: {
     "1": 0xf4ead4,
@@ -192,14 +213,21 @@ export const spritePalettes = {
   }
 } as const;
 
-export function getAntTexture(carrying: boolean): Texture {
-  return carrying
-    ? makeTexture("antCarry", [...spriteMaps.antCarry], spritePalettes.antCarry)
-    : makeTexture("ant", [...spriteMaps.ant], spritePalettes.ant);
+export type AntColor = "dark" | "red";
+
+export function getAntTexture(carrying: boolean, color: AntColor = "dark"): Texture {
+  const key = carrying ? `antCarry_${color}` : `ant_${color}`;
+  const palette = color === "red"
+    ? (carrying ? spritePalettes.antCarryRed : spritePalettes.antRed)
+    : (carrying ? spritePalettes.antCarry : spritePalettes.ant);
+
+  return makeTexture(key, carrying ? [...spriteMaps.antCarry] : [...spriteMaps.ant], palette);
 }
 
-export function getQueenTexture(): Texture {
-  return makeTexture("queen", [...spriteMaps.queen], spritePalettes.queen);
+export function getQueenTexture(color: AntColor = "dark"): Texture {
+  const key = `queen_${color}`;
+  const palette = color === "red" ? spritePalettes.queenRed : spritePalettes.queen;
+  return makeTexture(key, [...spriteMaps.queen], palette);
 }
 
 export function getEggTexture(): Texture {
