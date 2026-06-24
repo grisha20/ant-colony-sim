@@ -119,8 +119,9 @@ function moveSpider(world: World, enemy: Enemy): void {
   const underPressure = isSpiderUnderPressure(world, enemy);
   const hungry = enemy.hunger >= CONFIG.spiderHungryThreshold;
   const atSafeLair = distance(enemy.pos, enemy.lair) <= CONFIG.spiderLairSafeRadius;
-  const desperateFeed = enemy.hunger >= CONFIG.spiderStarveThreshold * CONFIG.spiderDesperateFeedFactor;
-  const canFeedUnderPressure = (atSafeLair && enemy.hoard > 0) || desperateFeed;
+  const desperate = enemy.hunger >= CONFIG.spiderStarveThreshold * CONFIG.spiderDesperateFeedFactor;
+  const canFeedUnderPressure = (atSafeLair && enemy.hoard > 0) || desperate;
+  const canStoreUnderPressure = nearbyAntCount(world, enemy, CONFIG.spiderStoreSafeRadius) === 0;
   const canStore = enemy.carrying > 0 || (enemy.hoard < CONFIG.spiderHoardMax && hasAvailableCarrion(world));
   if (hungry && (enemy.hoard > 0 || hasAvailableCarrion(world)) && (!underPressure || canFeedUnderPressure)) {
     spiderModes.set(enemy.id, { mode: "feed", repickAt: world.tick + 1 });
@@ -128,7 +129,7 @@ function moveSpider(world: World, enemy: Enemy): void {
     return;
   }
 
-  if (!hungry && canStore && !underPressure) {
+  if (!hungry && canStore && (!underPressure || canStoreUnderPressure)) {
     spiderModes.set(enemy.id, { mode: "store", repickAt: world.tick + 1 });
     applySpiderMode(world, enemy, "store", genome);
     return;
@@ -140,7 +141,7 @@ function moveSpider(world: World, enemy: Enemy): void {
     nearest.distance <= CONFIG.spiderEngageRange &&
     enemy.hoard <= 0 &&
     !hasAvailableCarrion(world) &&
-    !underPressure
+    (!underPressure || desperate)
   ) {
     spiderModes.set(enemy.id, { mode: "chase", repickAt: world.tick + 1 });
     applySpiderMode(world, enemy, "chase", genome);
@@ -203,6 +204,12 @@ function nearestSurfaceAnt(world: World, enemy: Enemy): { distance: number } | n
   }
 
   return nearest;
+}
+
+function nearbyAntCount(world: World, enemy: Enemy, radius: number): number {
+  return world.ants.filter(
+    (ant) => ant.layer === "surface" && ant.state !== "dead" && distance(ant.pos, enemy.pos) <= radius
+  ).length;
 }
 
 export function createSpider(): Enemy {

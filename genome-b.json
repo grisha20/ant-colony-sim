@@ -1,120 +1,18 @@
 {
   "current": {
-    "id": "genome-mqrzxy34-u5849y",
-    "generation": 6,
+    "id": "genome-mqs0nxgb-a4m40x",
+    "generation": 1,
     "genes": {
-      "nurseFraction": 0.5144643480725061,
-      "forageSpread": 0.12770668687540776,
-      "spiderAttackStorage": 25.048430668031134,
-      "layReserve": 17.438416241240713,
-      "refuelThreshold": 333.5972854784503,
-      "spiderAvoid": 8.85581162150036
+      "nurseFraction": 0.5737211415490283,
+      "forageSpread": 0.3475996749233781,
+      "spiderAttackStorage": 10.776939783349064,
+      "layReserve": 18.093897599111504,
+      "refuelThreshold": 434.02882662883906,
+      "spiderAvoid": 7.29639741483378
     }
   },
-  "best": {
-    "id": "genome-mqrxikzg-3ayvpr",
-    "generation": 6,
-    "genes": {
-      "nurseFraction": 0.5541863106492968,
-      "forageSpread": 0.2599995838073177,
-      "spiderAttackStorage": 32.212779120683564,
-      "layReserve": 15.282286707701374,
-      "refuelThreshold": 329.7424681446894,
-      "spiderAvoid": 8.856219839041497
-    }
-  },
-  "bestFitness": 16391.996875,
-  "archive": [
-    {
-      "genome": {
-        "id": "genome-mqrxikzg-3ayvpr",
-        "generation": 6,
-        "genes": {
-          "nurseFraction": 0.5541863106492968,
-          "forageSpread": 0.2599995838073177,
-          "spiderAttackStorage": 32.212779120683564,
-          "layReserve": 15.282286707701374,
-          "refuelThreshold": 329.7424681446894,
-          "spiderAvoid": 8.856219839041497
-        }
-      },
-      "fitness": 16391.996875
-    },
-    {
-      "genome": {
-        "id": "genome-mqry3tga-7vrlko",
-        "generation": 6,
-        "genes": {
-          "nurseFraction": 0.48903444688765774,
-          "forageSpread": 0.3602837062476306,
-          "spiderAttackStorage": 29.834064174831784,
-          "layReserve": 18.831221304035555,
-          "refuelThreshold": 273.5219253685718,
-          "spiderAvoid": 9.308887933908622
-        }
-      },
-      "fitness": 16104.790625
-    },
-    {
-      "genome": {
-        "id": "genome-mqrwwjrl-4srg16",
-        "generation": 5,
-        "genes": {
-          "nurseFraction": 0.5447850001587193,
-          "forageSpread": 0.1911207687112313,
-          "spiderAttackStorage": 25.449377683689672,
-          "layReserve": 15.779624701110027,
-          "refuelThreshold": 304.00516127724194,
-          "spiderAvoid": 8.380866752832889
-        }
-      },
-      "fitness": 15409.203125
-    },
-    {
-      "genome": {
-        "id": "genome-mqrydcgr-nzyhfq",
-        "generation": 7,
-        "genes": {
-          "nurseFraction": 0.5243403084585748,
-          "forageSpread": 0.30224776771761075,
-          "spiderAttackStorage": 37.44753227480292,
-          "layReserve": 15.046284166287126,
-          "refuelThreshold": 229.1509620154663,
-          "spiderAvoid": 8.940023234066803
-        }
-      },
-      "fitness": 15291.7
-    },
-    {
-      "genome": {
-        "id": "genome-mqryzvl0-tg2u06",
-        "generation": 7,
-        "genes": {
-          "nurseFraction": 0.5364000316714324,
-          "forageSpread": 0.37301298833240987,
-          "spiderAttackStorage": 24.118854879427005,
-          "layReserve": 17.478036003753054,
-          "refuelThreshold": 281.2832498486741,
-          "spiderAvoid": 8.188451195594387
-        }
-      },
-      "fitness": 15266.5875
-    },
-    {
-      "genome": {
-        "id": "genome-mqry6b1t-fmguw1",
-        "generation": 6,
-        "genes": {
-          "nurseFraction": 0.5923833979669836,
-          "forageSpread": 0.1227613767119896,
-          "spiderAttackStorage": 21.733950787280495,
-          "layReserve": 16.370210449886656,
-          "refuelThreshold": 362.54466846273357,
-          "spiderAvoid": 7.195756497188911
-        }
-      },
-      "fitness": 14714.04375
-    }
-  ],
-  "generationsRun": 2226
+  "best": null,
+  "bestFitness": 0,
+  "archive": [],
+  "generationsRun": 0
 }
