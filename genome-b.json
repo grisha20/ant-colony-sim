@@ -1,14 +1,14 @@
 {
   "current": {
-    "id": "genome-mqrv8em7-9duwjf",
-    "generation": 2,
+    "id": "genome-mqrv8ga4-vgkg8v",
+    "generation": 3,
     "genes": {
-      "nurseFraction": 0.5077462508867588,
-      "forageSpread": 0.36222909040006895,
-      "spiderAttackStorage": 0,
-      "layReserve": 26.21323889200084,
-      "refuelThreshold": 351.03803068433047,
-      "spiderAvoid": 6.869843917419282
+      "nurseFraction": 0.5661690299089639,
+      "forageSpread": 0.4441339954546586,
+      "spiderAttackStorage": 18.34473481767469,
+      "layReserve": 22.370755692926654,
+      "refuelThreshold": 413.9113494435835,
+      "spiderAvoid": 7.720898626577607
     }
   },
   "best": {
@@ -116,5 +116,5 @@
       "fitness": 1055.2629934210527
     }
   ],
-  "generationsRun": 147
+  "generationsRun": 150
 }
