@@ -1,0 +1,17 @@
+# Зависимости (ставятся через npm install, в репозиторий не нужны)
+node_modules/
+
+# Сборка и кэши
+dist/
+.vite/
+**/.vite/
+
+# Локальные сохранения мира и обучения (у каждого свои, в репо не нужны)
+snapshot.json
+genome.json
+spider_genome.json
+
+# Логи и мусор
+*.log
+.DS_Store
+Thumbs.db

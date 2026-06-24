@@ -1,0 +1,17 @@
+{
+  "name": "ant-colony-ai",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w server\" \"npm run dev -w client\"",
+    "check": "npm run check -w server && npm run check -w client",
+    "reset": "node -e \"require('node:fs').rmSync('snapshot.json',{force:true})\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
