@@ -97,6 +97,8 @@ export type Enemy = {
   lair: Vec2;
   carrying: number;
   hoard: number;
+  sprintLeft: number;
+  tiredLeft: number;
 };
 
 export type Surface = {

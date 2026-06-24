@@ -125,6 +125,22 @@ function moveToward(spider: Enemy, target: Vec2, speed: number): void {
   });
 }
 
+export function isSpiderFastMode(mode: SpiderMode): boolean {
+  return mode === "chase" || mode === "retreat";
+}
+
+export function spiderCurrentSpeed(spider: Enemy, fastMode: boolean): number {
+  if (!fastMode) {
+    return CONFIG.spiderSpeed;
+  }
+
+  if (spider.tiredLeft > 0 || spider.sprintLeft <= 0) {
+    return CONFIG.spiderTiredSpeed;
+  }
+
+  return CONFIG.spiderChaseSpeed;
+}
+
 function hashString(value: string): number {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
@@ -167,21 +183,15 @@ function retreatPoint(world: World, spider: Enemy): Vec2 {
     return existing;
   }
 
-  const threat = antCentroid(world, spider) ?? CONFIG.surfaceEntrance;
-  const away = normalize({ x: spider.pos.x - threat.x, y: spider.pos.y - threat.y });
-  const toCenter = normalize({ x: CONFIG.mapWidth / 2 - spider.pos.x, y: CONFIG.mapHeight / 2 - spider.pos.y });
-  const edgeCloseness = Math.max(
-    0,
-    1 - Math.min(spider.pos.x, spider.pos.y, CONFIG.mapWidth - spider.pos.x, CONFIG.mapHeight - spider.pos.y) / 16
-  );
-  const direction = normalize({
-    x: away.x * (1.15 - edgeCloseness * 0.65) + toCenter.x * (1 + edgeCloseness * 1.8),
-    y: away.y * (1.15 - edgeCloseness * 0.65) + toCenter.y * (1 + edgeCloseness * 1.8)
-  });
-  const target = clampSurface({
-    x: spider.pos.x + direction.x * 24,
-    y: spider.pos.y + direction.y * 24
-  });
+  const threat = antCentroid(world, spider);
+  const toLair = normalize({ x: spider.lair.x - spider.pos.x, y: spider.lair.y - spider.pos.y });
+  const away = threat ? normalize({ x: spider.pos.x - threat.x, y: spider.pos.y - threat.y }) : toLair;
+  const target = distance(spider.pos, spider.lair) > 4
+    ? spider.lair
+    : clampSurface({
+        x: spider.pos.x + away.x * 12,
+        y: spider.pos.y + away.y * 12
+      });
   retreatTargets.set(spider.id, target);
   return target;
 }
@@ -272,7 +282,7 @@ export function applyMode(world: World, spider: Enemy, mode: SpiderMode, genome:
   if (mode === "chase") {
     const target = nearestAnt(world, spider);
     if (target) {
-      moveToward(spider, target.ant.pos, CONFIG.spiderChaseSpeed);
+      moveToward(spider, target.ant.pos, spiderCurrentSpeed(spider, true));
       return;
     }
   }
@@ -294,14 +304,14 @@ export function applyMode(world: World, spider: Enemy, mode: SpiderMode, genome:
   }
 
   if (mode === "retreat") {
-    moveToward(spider, retreatPoint(world, spider), CONFIG.spiderChaseSpeed * 0.7);
+    moveToward(spider, retreatPoint(world, spider), spiderCurrentSpeed(spider, true));
     return;
   }
 
   if (mode === "feed") {
     if (spider.hoard > 0) {
       if (distance(spider.pos, spider.lair) > CONFIG.foodPickupRadius) {
-        moveToward(spider, spider.lair, CONFIG.spiderChaseSpeed * 0.75);
+        moveToward(spider, spider.lair, spiderCurrentSpeed(spider, false) * 1.2);
         return;
       }
 
@@ -314,7 +324,7 @@ export function applyMode(world: World, spider: Enemy, mode: SpiderMode, genome:
     const carrion = nearestCarrion(world, spider);
     if (carrion) {
       if (distance(spider.pos, carrion.pos) > CONFIG.foodPickupRadius) {
-        moveToward(spider, carrion.pos, CONFIG.spiderChaseSpeed * 0.8);
+        moveToward(spider, carrion.pos, spiderCurrentSpeed(spider, false) * 1.2);
         return;
       }
 
@@ -328,7 +338,7 @@ export function applyMode(world: World, spider: Enemy, mode: SpiderMode, genome:
   if (mode === "store") {
     if (spider.carrying > 0) {
       if (distance(spider.pos, spider.lair) > CONFIG.foodPickupRadius) {
-        moveToward(spider, spider.lair, CONFIG.spiderChaseSpeed * 0.65);
+        moveToward(spider, spider.lair, spiderCurrentSpeed(spider, false) * 1.15);
         return;
       }
 

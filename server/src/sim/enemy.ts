@@ -1,5 +1,5 @@
 import type { Enemy, Vec2 } from "../../../shared/types";
-import { applyMode, chooseMode, hasAvailableCarrion, type SpiderMode } from "../ai/spiderBrain";
+import { applyMode, chooseMode, hasAvailableCarrion, isSpiderFastMode, type SpiderMode } from "../ai/spiderBrain";
 import { recordAndEvolveSpider, saveSpiderGenome } from "../ai/spiderGenome";
 import { CONFIG } from "../config";
 import { addFoodSource, type World } from "./world";
@@ -30,22 +30,26 @@ function randomSurfacePoint(): Vec2 {
 }
 
 function randomLairPoint(): Vec2 {
-  const minDist = CONFIG.spiderLairMinDist;
-  const maxDist = CONFIG.spiderLairMaxDist;
+  const margin = CONFIG.spiderLairEdgeMargin;
+  const minNestDistance = Math.min(CONFIG.mapWidth, CONFIG.mapHeight) * 0.38;
   for (let attempt = 0; attempt < 80; attempt += 1) {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = minDist + Math.random() * Math.max(1, maxDist - minDist);
-    const pos = clampSurface({
-      x: CONFIG.surfaceEntrance.x + Math.cos(angle) * radius,
-      y: CONFIG.surfaceEntrance.y + Math.sin(angle) * radius
-    });
-    const actualDistance = distance(pos, CONFIG.surfaceEntrance);
-    if (actualDistance >= minDist && actualDistance <= maxDist) {
+    const side = Math.floor(Math.random() * 4);
+    const pos = clampSurface(
+      side === 0
+        ? { x: Math.random() * margin, y: Math.random() * CONFIG.mapHeight }
+        : side === 1
+          ? { x: CONFIG.mapWidth - Math.random() * margin, y: Math.random() * CONFIG.mapHeight }
+          : side === 2
+            ? { x: Math.random() * CONFIG.mapWidth, y: Math.random() * margin }
+            : { x: Math.random() * CONFIG.mapWidth, y: CONFIG.mapHeight - Math.random() * margin }
+    );
+
+    if (distance(pos, CONFIG.surfaceEntrance) >= minNestDistance) {
       return pos;
     }
   }
 
-  return clampSurface({ x: CONFIG.surfaceEntrance.x + minDist, y: CONFIG.surfaceEntrance.y });
+  return clampSurface({ x: CONFIG.mapWidth - margin, y: CONFIG.mapHeight - margin });
 }
 
 function randomHeading(): Vec2 {
@@ -117,13 +121,13 @@ function moveSpider(world: World, enemy: Enemy): void {
   const canStore = enemy.carrying > 0 || (enemy.hoard < CONFIG.spiderHoardMax && hasAvailableCarrion(world));
   if (hungry && (enemy.hoard > 0 || hasAvailableCarrion(world)) && !underPressure) {
     spiderModes.set(enemy.id, { mode: "feed", repickAt: world.tick + 1 });
-    applyMode(world, enemy, "feed", genome);
+    applySpiderMode(world, enemy, "feed", genome);
     return;
   }
 
   if (!hungry && canStore && !underPressure) {
     spiderModes.set(enemy.id, { mode: "store", repickAt: world.tick + 1 });
-    applyMode(world, enemy, "store", genome);
+    applySpiderMode(world, enemy, "store", genome);
     return;
   }
 
@@ -136,7 +140,7 @@ function moveSpider(world: World, enemy: Enemy): void {
     !underPressure
   ) {
     spiderModes.set(enemy.id, { mode: "chase", repickAt: world.tick + 1 });
-    applyMode(world, enemy, "chase", genome);
+    applySpiderMode(world, enemy, "chase", genome);
     return;
   }
 
@@ -150,7 +154,36 @@ function moveSpider(world: World, enemy: Enemy): void {
     spiderModes.set(enemy.id, state);
   }
 
-  applyMode(world, enemy, state.mode, genome);
+  applySpiderMode(world, enemy, state.mode, genome);
+}
+
+function updateSpiderStamina(enemy: Enemy, fastMode: boolean): void {
+  if (fastMode && enemy.tiredLeft <= 0 && enemy.sprintLeft > 0) {
+    enemy.sprintLeft -= 1;
+    if (enemy.sprintLeft <= 0) {
+      enemy.sprintLeft = 0;
+      enemy.tiredLeft = CONFIG.spiderRecoveryTicks;
+    }
+    return;
+  }
+
+  if (enemy.tiredLeft > 0) {
+    enemy.tiredLeft -= 1;
+    if (enemy.tiredLeft <= 0) {
+      enemy.tiredLeft = 0;
+      enemy.sprintLeft = CONFIG.spiderSprintTicks;
+    }
+  }
+}
+
+function applySpiderMode(
+  world: World,
+  enemy: Enemy,
+  mode: SpiderMode,
+  genome: Parameters<typeof applyMode>[3]
+): void {
+  applyMode(world, enemy, mode, genome);
+  updateSpiderStamina(enemy, isSpiderFastMode(mode));
 }
 
 function nearestSurfaceAnt(world: World, enemy: Enemy): { distance: number } | null {
@@ -183,7 +216,9 @@ export function createSpider(): Enemy {
     hunger: 0,
     lair,
     carrying: 0,
-    hoard: 0
+    hoard: 0,
+    sprintLeft: CONFIG.spiderSprintTicks,
+    tiredLeft: 0
   };
 }
 

@@ -288,7 +288,9 @@ function normalizeEnemies(snapshot: WorldSnapshot & { enemies?: Enemy[] }): Enem
       y: CONFIG.surfaceEntrance.y
     },
     carrying: enemy.carrying ?? 0,
-    hoard: enemy.hoard ?? 0
+    hoard: enemy.hoard ?? 0,
+    sprintLeft: enemy.sprintLeft ?? CONFIG.spiderSprintTicks,
+    tiredLeft: enemy.tiredLeft ?? 0
   }));
 }
 

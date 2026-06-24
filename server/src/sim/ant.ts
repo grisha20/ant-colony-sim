@@ -42,16 +42,31 @@ function moveToward(ant: Ant, target: Vec2, speed: number): void {
   ant.pos.y += direction.y * speed;
 }
 
+function surfaceMoveSpeed(world: World, ant: Ant): number {
+  const nearbyWorkers = world.ants.filter(
+    (other) =>
+      other.id !== ant.id &&
+      other.layer === "surface" &&
+      other.state !== "dead" &&
+      distance(other.pos, ant.pos) <= CONFIG.defenseRadius
+  ).length;
+
+  return nearbyWorkers >= CONFIG.antMobCountThreshold
+    ? CONFIG.workerSurfaceSpeed + CONFIG.antMobSpeedBonus
+    : CONFIG.workerSurfaceSpeed;
+}
+
 function moveSurfaceToward(world: World, ant: Ant, target: Vec2, avoidSpiders: boolean): void {
+  const speed = surfaceMoveSpeed(world, ant);
   let direction = normalize({ x: target.x - ant.pos.x, y: target.y - ant.pos.y });
 
   if (avoidSpiders) {
-    direction = applySpiderAvoidance(world, ant.pos, direction);
+    direction = applySpiderAvoidance(world, ant.pos, direction, speed);
   }
 
   ant.heading = direction;
-  ant.pos.x += direction.x * CONFIG.workerSurfaceSpeed;
-  ant.pos.y += direction.y * CONFIG.workerSurfaceSpeed;
+  ant.pos.x += direction.x * speed;
+  ant.pos.y += direction.y * speed;
   clampToSurface(ant, world);
 }
 
@@ -242,18 +257,19 @@ function shouldReturnFromSurface(world: World, ant: Ant): boolean {
 }
 
 function retreatFromSpiderToEntrance(world: World, ant: Ant, spiderPos: Vec2): void {
+  const speed = surfaceMoveSpeed(world, ant);
   const away = normalize({ x: ant.pos.x - spiderPos.x, y: ant.pos.y - spiderPos.y });
   const home = normalize({ x: world.surface.entrance.x - ant.pos.x, y: world.surface.entrance.y - ant.pos.y });
   const direction = normalize({ x: away.x * 1.4 + home.x, y: away.y * 1.4 + home.y });
   ant.state = "search";
   ant.heading = direction;
-  ant.pos.x += direction.x * CONFIG.workerSurfaceSpeed;
-  ant.pos.y += direction.y * CONFIG.workerSurfaceSpeed;
+  ant.pos.x += direction.x * speed;
+  ant.pos.y += direction.y * speed;
   clampToSurface(ant, world);
   tryCrossLayer(world, ant);
 }
 
-function applySpiderAvoidance(world: World, pos: Vec2, desired: Vec2): Vec2 {
+function applySpiderAvoidance(world: World, pos: Vec2, desired: Vec2, speed: number): Vec2 {
   const spider = nearestSpider(world, pos);
   if (spider.index < 0) {
     return desired;
@@ -261,8 +277,8 @@ function applySpiderAvoidance(world: World, pos: Vec2, desired: Vec2): Vec2 {
 
   const enemy = world.enemies[spider.index];
   const nextPos = {
-    x: pos.x + desired.x * CONFIG.workerSurfaceSpeed,
-    y: pos.y + desired.y * CONFIG.workerSurfaceSpeed
+    x: pos.x + desired.x * speed,
+    y: pos.y + desired.y * speed
   };
   const nextDistance = distance(nextPos, enemy.pos);
   if (nextDistance >= world.directives.spiderAvoidRadius && spider.distance >= world.directives.spiderAvoidRadius) {
@@ -444,6 +460,7 @@ function moveHungryHome(world: World, ant: Ant): void {
 }
 
 function moveSearching(world: World, ant: Ant): void {
+  const speed = surfaceMoveSpeed(world, ant);
   const foodIndex = nearestAvailableFood(world, ant);
   if (foodIndex >= 0 && pickupFoodIfReached(world, ant, foodIndex)) {
     return;
@@ -467,11 +484,11 @@ function moveSearching(world: World, ant: Ant): void {
     x: ant.heading.x * 0.35 + gradient.x * gradientPower + (directFood?.x ?? 0) * 1.4 + jitter.x * wanderWeight,
     y: ant.heading.y * 0.35 + gradient.y * gradientPower + (directFood?.y ?? 0) * 1.4 + jitter.y * wanderWeight
   });
-  const safeDirection = isColonyStarving(world) ? direction : applySpiderAvoidance(world, ant.pos, direction);
+  const safeDirection = isColonyStarving(world) ? direction : applySpiderAvoidance(world, ant.pos, direction, speed);
 
   ant.heading = safeDirection;
-  ant.pos.x += safeDirection.x * CONFIG.workerSurfaceSpeed;
-  ant.pos.y += safeDirection.y * CONFIG.workerSurfaceSpeed;
+  ant.pos.x += safeDirection.x * speed;
+  ant.pos.y += safeDirection.y * speed;
   clampToSurface(ant, world);
 }
 
