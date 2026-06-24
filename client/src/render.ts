@@ -11,7 +11,8 @@ import {
   createSpiderSprite,
   getEggTexture,
   getLarvaTexture,
-  getAntTexture
+  getAntTexture,
+  getQueenTexture
 } from "./sprites";
 
 export type ViewMode = "surface" | "underground";
@@ -495,10 +496,11 @@ function updateSurfaceAnts(pool: SpritePool, world: WorldSnapshot, cell: number,
     }
 
     const carrying = ant.state === "carry" || ant.carrying > 0;
+    const color = ant.colonyId === "colony-2" ? "red" : "dark";
     const sprite = acquireSprite(pool);
-    sprite.texture = getAntTexture(carrying);
+    sprite.texture = getAntTexture(carrying, color);
     sprite.scale.set(ant.state === "carry" ? 2.8 : 2.45);
-    sprite.tint = ant.colonyId === "colony-2" ? 0xd94a3f : 0xffffff;
+    sprite.tint = 0xffffff;
     placeSprite(sprite, ant.pos.x * cell, ant.pos.y * cell, antRotation(ant));
   }
 
@@ -649,6 +651,8 @@ function drawDecorativeTunnels(root: Container, world: WorldSnapshot): void {
 
 function updateUndergroundQueen(queen: Sprite, world: WorldSnapshot): void {
   const pos = undergroundToScreen(world, world.underground.queenChamber);
+  const color = world.colony?.id === "colony-2" ? "red" : "dark";
+  queen.texture = getQueenTexture(color);
   placeSprite(queen, pos.x - 18, pos.y + 6, 0);
   queen.alpha = world.underground.queen.alive ? 1 : 0.45;
 }
@@ -731,10 +735,11 @@ function updateUndergroundAnts(pool: SpritePool, world: WorldSnapshot): void {
 
     const pos = undergroundAntPosition(ant, world);
     const carrying = ant.carrying > 0 || ant.state === "deposit" || ant.state === "carryBrood";
+    const color = ant.colonyId === "colony-2" ? "red" : "dark";
     const sprite = acquireSprite(pool);
-    sprite.texture = getAntTexture(carrying);
+    sprite.texture = getAntTexture(carrying, color);
     sprite.scale.set(2.6);
-    sprite.tint = ant.colonyId === "colony-2" ? 0xd94a3f : 0xffffff;
+    sprite.tint = 0xffffff;
     placeSprite(sprite, pos.x, pos.y, ant.state === "deposit" ? 0 : antRotation(ant));
   }
 
