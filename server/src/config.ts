@@ -102,9 +102,9 @@ export const CONFIG = {
 
   // Player click on surface creates a finite food pile with this amount.
   playerFoodAmount: 80,
-  carrionCount: 10,
-  carrionAmount: 85,
-  carrionRespawnEveryTicks: 900,
+  carrionCount: 4,
+  carrionAmount: 40,
+  carrionRespawnEveryTicks: 2000,
 
   // Surface spider: a wandering danger that becomes food only when the starving colony attacks it.
   spiderMaxHp: 800,
@@ -129,7 +129,7 @@ export const CONFIG = {
   spiderLairMinDist: 25,
   spiderLairMaxDist: 55,
   spiderCarryAmount: 45,
-  spiderHoardMax: 180,
+  spiderHoardMax: 90,
   spiderHoardEatPerTick: 10,
   spiderMobRetreatCount: 2,
   spiderMobRetreatUtility: 2.4,

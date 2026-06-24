@@ -47,7 +47,7 @@ function randomSurfacePosAwayFromNest(minNestDistance: number): { x: number; y: 
 
 function makeFoodSources(): FoodSource[] {
   const area = CONFIG.mapWidth * CONFIG.mapHeight;
-  const sourceCount = Math.max(6, Math.round(area / 2600));
+  const sourceCount = Math.max(5, Math.round(area / 5200));
   const minNestDistance = Math.min(CONFIG.mapWidth, CONFIG.mapHeight) * 0.16;
   const sources: FoodSource[] = [];
 
@@ -57,7 +57,7 @@ function makeFoodSources(): FoodSource[] {
     sources.push({
       id: `food-${nextFoodSourceId}`,
       pos,
-      amount: 55 + Math.random() * 55
+      amount: 28 + Math.random() * 32
     });
     nextFoodSourceId += 1;
   }
