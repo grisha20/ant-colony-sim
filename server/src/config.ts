@@ -146,7 +146,7 @@ export const CONFIG = {
   starveFoodThreshold: 3,
   starveStorageThreshold: 6,
   colonyDeathMinTicks: 120,
-  generationMaxTicks: 12000,
+  generationMaxTicks: 1000000,
   fitnessPopWeight: 0,
   fitnessFoodWeight: 4,
   fitnessSpiderWeight: 2500,
