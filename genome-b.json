@@ -1,14 +1,14 @@
 {
   "current": {
-    "id": "genome-mqsbmnfu-nexcvu",
-    "generation": 4,
+    "id": "genome-mqsbnpo1-uvgdh2",
+    "generation": 5,
     "genes": {
-      "nurseFraction": 0.5289972683494212,
-      "forageSpread": 0.4464935435788213,
-      "spiderAttackStorage": 6.8656151776306675,
-      "layReserve": 18.685925874704232,
-      "refuelThreshold": 375.11806943510226,
-      "spiderAvoid": 6.9479505869716345
+      "nurseFraction": 0.4651027129076566,
+      "forageSpread": 0.3309792329447147,
+      "spiderAttackStorage": 15.6120783414955,
+      "layReserve": 21.10848369106098,
+      "refuelThreshold": 446.29542631511436,
+      "spiderAvoid": 6.43028872177577
     }
   },
   "best": {
@@ -72,6 +72,21 @@
     },
     {
       "genome": {
+        "id": "genome-mqsbmnfu-nexcvu",
+        "generation": 4,
+        "genes": {
+          "nurseFraction": 0.5289972683494212,
+          "forageSpread": 0.4464935435788213,
+          "spiderAttackStorage": 6.8656151776306675,
+          "layReserve": 18.685925874704232,
+          "refuelThreshold": 375.11806943510226,
+          "spiderAvoid": 6.9479505869716345
+        }
+      },
+      "fitness": 1650.9228070175438
+    },
+    {
+      "genome": {
         "id": "genome-mqsbk195-2r5hfv",
         "generation": 1,
         "genes": {
@@ -84,7 +99,22 @@
         }
       },
       "fitness": 1201.936274509804
+    },
+    {
+      "genome": {
+        "id": "genome-mqsbna7j-rnqn9e",
+        "generation": 4,
+        "genes": {
+          "nurseFraction": 0.4717726914183238,
+          "forageSpread": 0.4068062280649311,
+          "spiderAttackStorage": 20.395827431795816,
+          "layReserve": 20.327946668721943,
+          "refuelThreshold": 336.1651149771185,
+          "spiderAvoid": 7.141384593308114
+        }
+      },
+      "fitness": 1186.0696517412935
     }
   ],
-  "generationsRun": 4
+  "generationsRun": 6
 }
