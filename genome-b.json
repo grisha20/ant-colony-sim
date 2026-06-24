@@ -1,14 +1,14 @@
 {
   "current": {
-    "id": "genome-mqrv5akq-1rkxvc",
+    "id": "genome-mqrv5j6y-o3pdh2",
     "generation": 2,
     "genes": {
-      "nurseFraction": 0.516072200023066,
-      "forageSpread": 0.38002967102513474,
-      "spiderAttackStorage": 9.612655542658732,
-      "layReserve": 23.265068618203347,
-      "refuelThreshold": 358.5582673708946,
-      "spiderAvoid": 7.589012500463306
+      "nurseFraction": 0.6,
+      "forageSpread": 0.34132379000518664,
+      "spiderAttackStorage": 4.524312949333144,
+      "layReserve": 20.71219635794424,
+      "refuelThreshold": 385.0408394965698,
+      "spiderAvoid": 7.086800871941653
     }
   },
   "best": {
@@ -116,5 +116,5 @@
       "fitness": 255.56771488469602
     }
   ],
-  "generationsRun": 48
+  "generationsRun": 62
 }
