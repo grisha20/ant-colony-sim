@@ -47,6 +47,7 @@ export type DigTask = {
   id: string;
   type: DigTaskType;
   roomType?: UndergroundRoomType;
+  roomPlan?: { x: number; y: number; width: number; height: number };
   targetTiles: Vec2[];
   completedTiles: number;
   status: "planned" | "active" | "done";

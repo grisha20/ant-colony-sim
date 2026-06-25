@@ -153,7 +153,7 @@ function fitRoot(root: Container, viewportWidth: number, viewportHeight: number,
 
 function undergroundToScreen(world: WorldSnapshot, pos: Vec2): Vec2 {
   const xRange = UNDERGROUND_WIDTH - undergroundLayout.marginX * 2;
-  const yTop = undergroundLayout.surfaceY + 28;
+  const yTop = undergroundLayout.surfaceY;
   const yRange = UNDERGROUND_HEIGHT - yTop - undergroundLayout.bottomPadding;
 
   return {
@@ -164,7 +164,7 @@ function undergroundToScreen(world: WorldSnapshot, pos: Vec2): Vec2 {
 
 function undergroundGridMetrics(world: WorldSnapshot): { x: number; y: number; cellWidth: number; cellHeight: number } {
   const xRange = UNDERGROUND_WIDTH - undergroundLayout.marginX * 2;
-  const yTop = undergroundLayout.surfaceY + 28;
+  const yTop = undergroundLayout.surfaceY;
   const yRange = UNDERGROUND_HEIGHT - yTop - undergroundLayout.bottomPadding;
   return {
     x: undergroundLayout.marginX,
@@ -661,8 +661,8 @@ function drawUndergroundGrid(root: Container, world: WorldSnapshot): void {
       const tile = row[x];
       const screenX = metrics.x + x * metrics.cellWidth;
       const screenY = metrics.y + y * metrics.cellHeight;
-      const width = Math.ceil(metrics.cellWidth);
-      const height = Math.ceil(metrics.cellHeight);
+      const width = Math.ceil(metrics.cellWidth) + 1;
+      const height = Math.ceil(metrics.cellHeight) + 1;
       if (tile.type === "soil") {
         grid.rect(screenX, screenY, width, height).fill({
           color: tile.digProgress ? 0x6f4a30 : 0x5a3a1a,
@@ -673,9 +673,6 @@ function drawUndergroundGrid(root: Container, world: WorldSnapshot): void {
       } else {
         const color = tile.type === "chamber" ? 0xa08030 : 0x8b6914;
         grid.rect(screenX, screenY, width, height).fill(color);
-        if (tile.type === "chamber") {
-          grid.rect(screenX, screenY, width, height).stroke({ width: 1, color: 0x5b4317, alpha: 0.4 });
-        }
       }
     }
   }

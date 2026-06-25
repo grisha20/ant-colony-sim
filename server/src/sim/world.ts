@@ -190,8 +190,8 @@ export function createColonyRuntime(
     spiderGenomeState.current.generation,
     spiderGenomeState.generationsRun
   );
-  const underground = createUnderground();
-  const ants = Array.from({ length: CONFIG.startingWorkers }, () => createWorkerAnt(CONFIG.queenPos, "underground", id));
+  const underground = createUnderground(id);
+  const ants = Array.from({ length: CONFIG.startingWorkers }, () => createWorkerAnt(underground.queenChamber, "underground", id));
   underground.ants = ants.map((ant) => ant.id);
   const runtime: ColonyRuntime = {
     id,

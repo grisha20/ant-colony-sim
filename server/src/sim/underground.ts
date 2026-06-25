@@ -70,6 +70,10 @@ function roomBounds(center: Vec2, width: number, height: number): { x: number; y
   };
 }
 
+function roomCenterFromBounds(bounds: { x: number; y: number; width: number; height: number }): Vec2 {
+  return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+}
+
 function rectTiles(x: number, y: number, width: number, height: number): Vec2[] {
   const tiles: Vec2[] = [];
   for (let ty = y; ty < y + height; ty += 1) {
@@ -103,42 +107,43 @@ function lineTiles(from: Vec2, to: Vec2): Vec2[] {
   const start = tilePos(from);
   const end = tilePos(to);
   const tiles: Vec2[] = [];
-  const stepX = start.x <= end.x ? 1 : -1;
-  const stepY = start.y <= end.y ? 1 : -1;
+  const steps = Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y), 1);
 
-  for (let x = start.x; x !== end.x + stepX; x += stepX) {
-    tiles.push({ x, y: start.y });
-  }
-  for (let y = start.y + stepY; y !== end.y + stepY; y += stepY) {
-    tiles.push({ x: end.x, y });
+  for (let step = 0; step <= steps; step += 1) {
+    const t = step / steps;
+    tiles.push({
+      x: Math.round(start.x + (end.x - start.x) * t),
+      y: Math.round(start.y + (end.y - start.y) * t)
+    });
   }
 
-  return tiles;
+  return uniqueTiles(tiles);
 }
 
 function edgeRoughness(x: number, y: number): number {
   return (x * 17 + y * 31) % 11;
 }
 
-function organicTunnelTiles(points: Vec2[]): Vec2[] {
+function organicTunnelTiles(points: Vec2[], width: number = CONFIG.tunnelWidth): Vec2[] {
   const tiles: Vec2[] = [];
-  const halfWidth = Math.floor(CONFIG.tunnelWidth / 2);
+  const halfWidth = Math.floor(width / 2);
   for (let index = 0; index < points.length - 1; index += 1) {
     const from = tilePos(points[index]);
     const to = tilePos(points[index + 1]);
-    const horizontal = Math.abs(to.x - from.x) >= Math.abs(to.y - from.y);
     const segment = lineTiles(points[index], points[index + 1]);
     for (const tile of segment) {
-      for (let offset = -halfWidth; offset <= halfWidth; offset += 1) {
-        tiles.push(horizontal ? { x: tile.x, y: tile.y + offset } : { x: tile.x + offset, y: tile.y });
+      for (let oy = -halfWidth; oy <= halfWidth; oy += 1) {
+        for (let ox = -halfWidth; ox <= halfWidth; ox += 1) {
+          if (ox * ox + oy * oy <= halfWidth * halfWidth + 0.6) {
+            tiles.push({ x: tile.x + ox, y: tile.y + oy });
+          }
+        }
       }
 
       if (edgeRoughness(tile.x, tile.y) > 8) {
-        const roughOffset = halfWidth + 1;
-        tiles.push(horizontal ? { x: tile.x, y: tile.y + roughOffset } : { x: tile.x + roughOffset, y: tile.y });
+        tiles.push({ x: tile.x + halfWidth + 1, y: tile.y });
       } else if (edgeRoughness(tile.x, tile.y) < 2) {
-        const roughOffset = -(halfWidth + 1);
-        tiles.push(horizontal ? { x: tile.x, y: tile.y + roughOffset } : { x: tile.x + roughOffset, y: tile.y });
+        tiles.push({ x: tile.x, y: tile.y - halfWidth - 1 });
       }
     }
   }
@@ -159,81 +164,142 @@ function uniqueTiles(tiles: Vec2[]): Vec2[] {
   return result;
 }
 
-function createQueenRoom(): UndergroundRoom {
-  const bounds = roomBounds(CONFIG.queenPos, CONFIG.startingQueenRoomWidth, CONFIG.startingQueenRoomHeight);
+function createRoomFromBounds(
+  id: string,
+  type: UndergroundRoom["type"],
+  bounds: { x: number; y: number; width: number; height: number },
+  capacity: number,
+  used = 0
+): UndergroundRoom {
   return {
-    id: "room-queen",
-    type: "queen",
+    id,
+    type,
     x: bounds.x,
     y: bounds.y,
     width: bounds.width,
     height: bounds.height,
-    capacity: 24,
-    used: 1
+    capacity,
+    used
   };
 }
 
-function createStorageRoom(): UndergroundRoom {
-  const bounds = roomBounds(CONFIG.storagePos, CONFIG.plannedStorageRoomWidth, CONFIG.plannedStorageRoomHeight);
+function createQueenRoom(center: Vec2 = CONFIG.queenPos): UndergroundRoom {
+  return createRoomFromBounds(
+    "room-queen",
+    "queen",
+    roomBounds(center, CONFIG.startingQueenRoomWidth, CONFIG.startingQueenRoomHeight),
+    24,
+    1
+  );
+}
+
+function createStorageRoom(center: Vec2 = CONFIG.storagePos): UndergroundRoom {
+  return createRoomFromBounds(
+    "room-storage",
+    "storage",
+    roomBounds(center, CONFIG.plannedStorageRoomWidth, CONFIG.plannedStorageRoomHeight),
+    CONFIG.plannedStorageCapacity
+  );
+}
+
+function createNurseryRoom(bounds: { x: number; y: number; width: number; height: number }): UndergroundRoom {
+  return createRoomFromBounds("room-nursery", "nursery", bounds, CONFIG.plannedNurseryCapacity);
+}
+
+function createEggRoom(bounds = roomBounds(CONFIG.eggRoomPos, CONFIG.plannedEggRoomWidth, CONFIG.plannedEggRoomHeight)): UndergroundRoom {
+  return createRoomFromBounds("room-egg", "egg", bounds, CONFIG.plannedEggRoomCapacity);
+}
+
+function seededNoise(seed: number, x: number, y: number): number {
+  const value = Math.sin((x + seed * 17.17) * 12.9898 + (y - seed * 9.31) * 78.233) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+function colonySeed(colonyId = "colony-1"): number {
+  return Array.from(colonyId).reduce((total, char) => total + char.charCodeAt(0), 0);
+}
+
+function clampRoomCenter(center: Vec2, width: number, height: number): Vec2 {
   return {
-    id: "room-storage",
-    type: "storage",
-    x: bounds.x,
-    y: bounds.y,
-    width: bounds.width,
-    height: bounds.height,
-    capacity: CONFIG.plannedStorageCapacity,
-    used: 0
+    x: Math.max(width / 2 + 3, Math.min(CONFIG.undergroundWidth - width / 2 - 3, center.x)),
+    y: Math.max(height / 2 + 4, Math.min(CONFIG.undergroundHeight - height / 2 - 3, center.y))
   };
 }
 
-function createNurseryRoom(): UndergroundRoom {
-  const bounds = roomBounds(CONFIG.nurseryPos, CONFIG.plannedNurseryRoomWidth, CONFIG.plannedNurseryRoomHeight);
+function createNestLayout(colonyId = "colony-1"): {
+  entrance: Vec2;
+  junction: Vec2;
+  queen: Vec2;
+  storage: Vec2;
+  nursery: Vec2;
+  barracksA: Vec2;
+  barracksB: Vec2;
+} {
+  const seed = colonySeed(colonyId);
+  const side = seed % 2 === 0 ? 1 : -1;
+  const entrance = {
+    x: Math.round(CONFIG.undergroundEntrance.x + side * (4 + (seed % 5))),
+    y: 0
+  };
+  const queen = clampRoomCenter(
+    {
+      x: entrance.x + side * (18 + (seed % 7)),
+      y: 58 + (seed % 10)
+    },
+    CONFIG.startingQueenRoomWidth,
+    CONFIG.startingQueenRoomHeight
+  );
+  const storage = clampRoomCenter(
+    {
+      x: queen.x - side * (10 + (seed % 4)),
+      y: queen.y - 8 - (seed % 3)
+    },
+    CONFIG.plannedStorageRoomWidth,
+    CONFIG.plannedStorageRoomHeight
+  );
+  const nursery = clampRoomCenter(
+    {
+      x: queen.x + side * 9,
+      y: queen.y + 4
+    },
+    CONFIG.plannedNurseryRoomWidth,
+    CONFIG.plannedNurseryRoomHeight
+  );
+  const junction = {
+    x: Math.round((entrance.x + queen.x) / 2 + side * 2),
+    y: Math.round((entrance.y + queen.y) / 2)
+  };
+
   return {
-    id: "room-nursery",
-    type: "nursery",
-    x: bounds.x,
-    y: bounds.y,
-    width: bounds.width,
-    height: bounds.height,
-    capacity: CONFIG.plannedNurseryCapacity,
-    used: 0
+    entrance,
+    junction,
+    queen,
+    storage,
+    nursery,
+    barracksA: { x: storage.x, y: storage.y - 8 },
+    barracksB: { x: queen.x - side * 14, y: queen.y + 9 }
   };
 }
 
-function createEggRoom(): UndergroundRoom {
-  const bounds = roomBounds(CONFIG.eggRoomPos, CONFIG.plannedEggRoomWidth, CONFIG.plannedEggRoomHeight);
-  return {
-    id: "room-egg",
-    type: "egg",
-    x: bounds.x,
-    y: bounds.y,
-    width: bounds.width,
-    height: bounds.height,
-    capacity: CONFIG.plannedEggRoomCapacity,
-    used: 0
-  };
-}
-
-function createDiggableLayer(): Pick<Underground, "grid" | "rooms" | "digTasks" | "dirtMound"> {
+function createDiggableLayer(layout = createNestLayout()): Pick<Underground, "grid" | "rooms" | "digTasks" | "dirtMound"> {
   const grid = makeSoilGrid(CONFIG.undergroundWidth, CONFIG.undergroundHeight);
-  const queenRoom = createQueenRoom();
-  const storageRoom = createStorageRoom();
+  const queenRoom = createQueenRoom(layout.queen);
+  const storageRoom = createStorageRoom(layout.storage);
 
   const startingTunnel = organicTunnelTiles([
-    CONFIG.undergroundEntrance,
-    { x: CONFIG.undergroundEntrance.x - 1, y: 18 },
-    { x: CONFIG.undergroundJunction.x + 2, y: CONFIG.undergroundJunction.y },
-    { x: 58, y: 56 },
-    CONFIG.queenPos
+    layout.entrance,
+    { x: layout.entrance.x + Math.sign(layout.queen.x - layout.entrance.x) * 2, y: 14 },
+    layout.junction,
+    { x: (layout.junction.x + layout.queen.x) / 2, y: layout.queen.y - 10 },
+    layout.queen
   ]);
   for (const tile of startingTunnel) {
     setTile(grid, tile.x, tile.y, "tunnel");
   }
-  for (const tile of organicTunnelTiles([{ x: 58, y: 56 }, CONFIG.storagePos])) {
+  for (const tile of organicTunnelTiles([layout.queen, { x: (layout.queen.x + layout.storage.x) / 2, y: layout.storage.y }, layout.storage], 2)) {
     setTile(grid, tile.x, tile.y, "tunnel");
   }
-  setTile(grid, Math.round(CONFIG.undergroundEntrance.x), Math.round(CONFIG.undergroundEntrance.y), "entrance");
+  setTile(grid, Math.round(layout.entrance.x), Math.round(layout.entrance.y), "entrance");
   carveRoom(grid, queenRoom);
   carveRoom(grid, storageRoom);
 
@@ -274,6 +340,101 @@ function hasRoomTask(underground: Underground, roomType: DigTask["roomType"]): b
   return underground.digTasks.some((task) => task.roomType === roomType && task.status !== "done");
 }
 
+function boundsOverlap(a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }, padding = 2): boolean {
+  return (
+    a.x - padding < b.x + b.width &&
+    a.x + a.width + padding > b.x &&
+    a.y - padding < b.y + b.height &&
+    a.y + a.height + padding > b.y
+  );
+}
+
+function roomBoundsOf(room: UndergroundRoom): { x: number; y: number; width: number; height: number } {
+  return { x: room.x, y: room.y, width: room.width, height: room.height };
+}
+
+function isRoomPlanClear(underground: Underground, bounds: { x: number; y: number; width: number; height: number }): boolean {
+  if (
+    bounds.x < 3 ||
+    bounds.y < 4 ||
+    bounds.x + bounds.width >= underground.width - 3 ||
+    bounds.y + bounds.height >= underground.height - 3
+  ) {
+    return false;
+  }
+
+  return underground.rooms.every((room) => !boundsOverlap(bounds, roomBoundsOf(room), 4));
+}
+
+function nearestDugTileTo(underground: Underground, target: Vec2): Vec2 {
+  let best = tilePos(underground.queenChamber);
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (let y = 0; y < underground.grid.length; y += 1) {
+    for (let x = 0; x < underground.grid[y].length; x += 1) {
+      if (!isDugTile(underground, x, y)) {
+        continue;
+      }
+      const dist = Math.hypot(x + 0.5 - target.x, y + 0.5 - target.y);
+      if (dist < bestDistance) {
+        best = { x, y };
+        bestDistance = dist;
+      }
+    }
+  }
+  return best;
+}
+
+function chooseRoomPlan(
+  underground: Underground,
+  roomType: UndergroundRoom["type"],
+  width: number,
+  height: number
+): { x: number; y: number; width: number; height: number } {
+  const queen = underground.queenChamber;
+  const seed = Math.round(queen.x * 13 + queen.y * 7 + (roomType === "nursery" ? 101 : 211));
+  const candidates: Array<{ bounds: { x: number; y: number; width: number; height: number }; score: number }> = [];
+
+  for (let radius = 9; radius <= 24; radius += 2) {
+    for (let angleIndex = 0; angleIndex < 18; angleIndex += 1) {
+      const angle = (Math.PI * 2 * angleIndex) / 18 + seededNoise(seed, radius, angleIndex) * 0.34;
+      const center = clampRoomCenter(
+        {
+          x: queen.x + Math.cos(angle) * radius,
+          y: queen.y + Math.sin(angle) * radius * 0.55
+        },
+        width,
+        height
+      );
+      const bounds = roomBounds(center, width, height);
+      if (!isRoomPlanClear(underground, bounds)) {
+        continue;
+      }
+      const centerPoint = roomCenterFromBounds(bounds);
+      const nearestDug = nearestDugTileTo(underground, centerPoint);
+      const distToQueen = Math.hypot(centerPoint.x - queen.x, centerPoint.y - queen.y);
+      const tunnelCost = Math.hypot(centerPoint.x - nearestDug.x, centerPoint.y - nearestDug.y);
+      const depthPenalty = roomType === "nursery" ? Math.abs(centerPoint.y - (queen.y + 2)) * 0.9 : Math.abs(centerPoint.y - (queen.y - 7)) * 0.6;
+      const score = tunnelCost * 1.25 + Math.abs(distToQueen - 12) * 1.6 + depthPenalty + seededNoise(seed, bounds.x, bounds.y) * 3;
+      candidates.push({ bounds, score });
+    }
+  }
+
+  return (candidates.sort((a, b) => a.score - b.score)[0]?.bounds) ??
+    roomBounds(clampRoomCenter({ x: queen.x + 10, y: queen.y + 3 }, width, height), width, height);
+}
+
+function tunnelToRoomTiles(underground: Underground, bounds: { x: number; y: number; width: number; height: number }): Vec2[] {
+  const center = roomCenterFromBounds(bounds);
+  const start = nearestDugTileTo(underground, center);
+  const sideX = start.x < center.x ? bounds.x - 1 : bounds.x + bounds.width;
+  const doorway = { x: sideX, y: Math.round(center.y) };
+  const bend = {
+    x: Math.round((start.x + doorway.x) / 2),
+    y: Math.round((start.y + doorway.y) / 2 + (edgeRoughness(start.x, doorway.y) - 5) * 0.35)
+  };
+  return organicTunnelTiles([tileCenter(start), bend, doorway], 2);
+}
+
 function makeStorageDigTask(underground: Underground): DigTask {
   const targets = storageTargetTiles().filter((tile) => inBounds(underground.grid, tile.x, tile.y));
   return {
@@ -286,25 +447,22 @@ function makeStorageDigTask(underground: Underground): DigTask {
   };
 }
 
-function nurseryTargetTiles(): Vec2[] {
-  const room = createNurseryRoom();
-  return uniqueTiles([
-    ...organicTunnelTiles([
-      CONFIG.storagePos,
-      { x: 68, y: 66 },
-      { x: 76, y: 72 },
-      CONFIG.nurseryPos
-    ]),
-    ...ovalTiles(room.x, room.y, room.width, room.height)
-  ]);
-}
-
 function makeNurseryDigTask(underground: Underground): DigTask {
-  const targets = nurseryTargetTiles().filter((tile) => inBounds(underground.grid, tile.x, tile.y));
+  const roomPlan = chooseRoomPlan(
+    underground,
+    "nursery",
+    CONFIG.plannedNurseryRoomWidth,
+    CONFIG.plannedNurseryRoomHeight
+  );
+  const targets = uniqueTiles([
+    ...tunnelToRoomTiles(underground, roomPlan),
+    ...ovalTiles(roomPlan.x, roomPlan.y, roomPlan.width, roomPlan.height)
+  ]).filter((tile) => inBounds(underground.grid, tile.x, tile.y));
   return {
     id: `dig-nursery-${underground.digTasks.length + 1}`,
     type: "digRoom",
     roomType: "nursery",
+    roomPlan,
     targetTiles: targets,
     completedTiles: targets.filter((tile) => underground.grid[tile.y]?.[tile.x]?.type !== "soil").length,
     status: "planned"
@@ -350,12 +508,22 @@ function completeStorageRoom(underground: Underground): void {
   underground.rooms.push(room);
 }
 
-function completeNurseryRoom(underground: Underground): void {
+function completeNurseryRoom(underground: Underground, bounds?: { x: number; y: number; width: number; height: number }): void {
   if (underground.rooms.some((room) => room.type === "nursery")) {
     return;
   }
 
-  underground.rooms.push(createNurseryRoom());
+  const room = createNurseryRoom(
+    bounds ??
+      chooseRoomPlan(
+        underground,
+        "nursery",
+        CONFIG.plannedNurseryRoomWidth,
+        CONFIG.plannedNurseryRoomHeight
+      )
+  );
+  underground.rooms.push(room);
+  underground.nursery = roomCenter(room);
 }
 
 function nurseryChamberCapacity(underground: Underground): number {
@@ -409,7 +577,10 @@ function tileTypeForTask(task: DigTask, tile: Vec2): UndergroundTileType {
   }
 
   if (task.roomType === "nursery") {
-    const room = createNurseryRoom();
+    const room = task.roomPlan;
+    if (!room) {
+      return "chamber";
+    }
     const insideRoom =
       tile.x >= room.x &&
       tile.x < room.x + room.width &&
@@ -419,7 +590,7 @@ function tileTypeForTask(task: DigTask, tile: Vec2): UndergroundTileType {
   }
 
   if (task.roomType === "egg") {
-    const room = createEggRoom();
+    const room = task.roomPlan ?? createEggRoom();
     const insideRoom =
       tile.x >= room.x &&
       tile.x < room.x + room.width &&
@@ -573,6 +744,9 @@ export function completeDigTile(underground: Underground, taskId: string | undef
   setTile(underground.grid, tile.x, tile.y, tileTypeForTask(task, tile), roomIdForTask(task));
   underground.dirtMound += CONFIG.dirtPerDugTile;
   if (task.roomType === "nursery") {
+    if (!underground.rooms.some((room) => room.type === "nursery") && task.roomPlan) {
+      completeNurseryRoom(underground, task.roomPlan);
+    }
     syncNurseryCapacity(underground);
   }
   refreshDigTasks(underground);
@@ -625,7 +799,7 @@ export function refreshDigTasks(underground: Underground): void {
       task.completedTiles >= 1 &&
       !underground.rooms.some((room) => room.type === "nursery")
     ) {
-      completeNurseryRoom(underground);
+      completeNurseryRoom(underground, task.roomPlan);
       syncNurseryCapacity(underground);
     }
 
@@ -638,7 +812,7 @@ export function refreshDigTasks(underground: Underground): void {
         completeStorageRoom(underground);
       }
       if (task.roomType === "nursery") {
-        completeNurseryRoom(underground);
+        completeNurseryRoom(underground, task.roomPlan);
       }
       if (task.roomType === "egg") {
         completeEggRoom(underground);
@@ -676,13 +850,14 @@ export function updateRoomUsage(underground: Underground): void {
   }
 }
 
-export function createUnderground(): Underground {
-  const queenChamber = CONFIG.queenPos;
-  const junction = CONFIG.undergroundJunction;
-  const nursery = CONFIG.nurseryPos;
-  const storage = CONFIG.storagePos;
-  const barracksA = CONFIG.barracksAPos;
-  const barracksB = CONFIG.barracksBPos;
+export function createUnderground(colonyId = "colony-1"): Underground {
+  const layout = createNestLayout(colonyId);
+  const queenChamber = layout.queen;
+  const junction = layout.junction;
+  const nursery = layout.nursery;
+  const storage = layout.storage;
+  const barracksA = layout.barracksA;
+  const barracksB = layout.barracksB;
   const brood = [
     ...Array.from({ length: CONFIG.startingEggs }, () => makeBrood("egg", "queen", queenChamber)),
     ...Array.from({ length: CONFIG.startingLarvae }, () => makeBrood("larva", "nursery", nursery))
@@ -691,7 +866,7 @@ export function createUnderground(): Underground {
   return {
     width: CONFIG.undergroundWidth,
     height: CONFIG.undergroundHeight,
-    ...createDiggableLayer(),
+    ...createDiggableLayer(layout),
     queen: {
       pos: queenChamber,
       alive: true,
@@ -703,7 +878,7 @@ export function createUnderground(): Underground {
     },
     brood,
     foodStorage: CONFIG.startingFoodStorage,
-    entrance: CONFIG.undergroundEntrance,
+    entrance: layout.entrance,
     junction,
     queenChamber,
     nursery,
