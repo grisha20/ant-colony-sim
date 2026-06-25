@@ -63,7 +63,7 @@ function surfaceMoveSpeed(world: World, ant: Ant): number {
     : CONFIG.workerSurfaceSpeed;
 }
 
-function moveSurfaceToward(world: World, ant: Ant, target: Vec2, avoidSpiders: boolean): void {
+function moveSurfaceToward(world: World, ant: Ant, target: Vec2, avoidSpiders: boolean, allowSeparation = true): void {
   const speed = surfaceMoveSpeed(world, ant);
   let direction = normalize({ x: target.x - ant.pos.x, y: target.y - ant.pos.y });
 
@@ -71,7 +71,9 @@ function moveSurfaceToward(world: World, ant: Ant, target: Vec2, avoidSpiders: b
     direction = applySpiderAvoidance(world, ant.pos, direction, speed);
   }
 
-  direction = applySeparation(world, ant, direction);
+  if (allowSeparation) {
+    direction = applySeparation(world, ant, direction);
+  }
 
   ant.heading = direction;
   ant.pos.x += direction.x * speed;
@@ -467,8 +469,20 @@ function freeWorkerCountNearSpider(world: World, spiderIndex: number): number {
 
 function activeSurfaceForagers(world: World): number {
   return world.ants.filter(
-    (ant) => ant.layer === "surface" && ant.state !== "dead" && ant.carrying <= 0 && ant.state !== "fight"
+    (ant) => ant.layer === "surface" && ant.state === "search" && ant.carrying <= 0 && ant.job !== "nurse" && ant.job !== "dig"
   ).length;
+}
+
+function scoutDirection(world: World, ant: Ant): Vec2 {
+  const seed = numericAntId(ant.id) + (ant.colonyId === "colony-2" ? 19 : 0);
+  const angle = seed * 2.399963229728653 + Math.floor(world.tick / 900) * 0.65;
+  let direction = { x: Math.cos(angle), y: Math.sin(angle) };
+  const distFromEntrance = distance(ant.pos, world.surface.entrance);
+  if (distFromEntrance < CONFIG.antFoodSightRadius) {
+    const away = normalize({ x: ant.pos.x - world.surface.entrance.x, y: ant.pos.y - world.surface.entrance.y });
+    direction = normalize({ x: direction.x + away.x * 1.2, y: direction.y + away.y * 1.2 });
+  }
+  return direction;
 }
 
 function enemyColonyAnts(world: World, ant: Ant): Ant[] {
@@ -973,21 +987,21 @@ function moveHungryToFood(world: World, ant: Ant): boolean {
 function moveHungryHome(world: World, ant: Ant): void {
   ant.state = "return";
   ant.job = "forage";
-  moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world));
+  moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world), false);
   tryCrossLayer(world, ant);
 }
 
 function moveNurseHome(world: World, ant: Ant): void {
   ant.state = "return";
   ant.job = "nurse";
-  moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world));
+  moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world), false);
   tryCrossLayer(world, ant);
 }
 
 function moveDiggerHome(world: World, ant: Ant): void {
   ant.state = "return";
   ant.job = "dig";
-  moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world));
+  moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world), false);
   tryCrossLayer(world, ant);
 }
 
@@ -1032,10 +1046,21 @@ function moveSearching(world: World, ant: Ant): void {
   const wanderWeight = directFood
     ? world.directives.forageWander * 0.35
     : world.directives.forageWander * (1.0 + Math.min(3.0, density / 4.0));
+  const scout = foodAvailable ? null : scoutDirection(world, ant);
 
   const direction = normalize({
-    x: ant.heading.x * 0.35 + gradient.x * gradientPower + (directFood?.x ?? 0) * 1.4 + jitter.x * wanderWeight,
-    y: ant.heading.y * 0.35 + gradient.y * gradientPower + (directFood?.y ?? 0) * 1.4 + jitter.y * wanderWeight
+    x:
+      ant.heading.x * 0.35 +
+      gradient.x * gradientPower +
+      (directFood?.x ?? 0) * 1.4 +
+      (scout?.x ?? 0) * 1.35 +
+      jitter.x * wanderWeight,
+    y:
+      ant.heading.y * 0.35 +
+      gradient.y * gradientPower +
+      (directFood?.y ?? 0) * 1.4 +
+      (scout?.y ?? 0) * 1.35 +
+      jitter.y * wanderWeight
   });
   const safeDirection = isColonyStarving(world) ? direction : applySpiderAvoidance(world, ant.pos, direction, speed);
 
@@ -1050,7 +1075,7 @@ function moveCarrying(world: World, ant: Ant): void {
   ant.job = "forage";
   world.pheromones.food.add(ant.pos.x, ant.pos.y, CONFIG.foodPheromoneDeposit);
 
-  moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world));
+  moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world), false);
   tryCrossLayer(world, ant);
 }
 
@@ -1224,6 +1249,10 @@ function stepUnderground(world: World, ant: Ant): void {
 }
 
 function stepSurface(world: World, ant: Ant): void {
+  if ((ant.state === "return" || ant.state === "carry" || ant.carrying > 0) && tryCrossLayer(world, ant)) {
+    return;
+  }
+
   if (handleEnemyColonyCombat(world, ant)) {
     return;
   }
@@ -1321,7 +1350,11 @@ export function tryCrossLayer(world: World, ant: Ant): boolean {
     return true;
   }
 
-  if (ant.layer === "surface" && distance(ant.pos, world.surface.entrance) <= CONFIG.entranceRadiusSurface) {
+  const surfaceEntryRadius =
+    ant.state === "return" || ant.state === "carry" || ant.carrying > 0
+      ? Math.max(CONFIG.entranceRadiusSurface, 3.5)
+      : CONFIG.entranceRadiusSurface;
+  if (ant.layer === "surface" && distance(ant.pos, world.surface.entrance) <= surfaceEntryRadius) {
     ant.layer = "underground";
     ant.state = ant.carrying > 0 ? "deposit" : "idle";
     ant.pos = { ...world.underground.entrance };
