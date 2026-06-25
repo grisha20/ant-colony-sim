@@ -331,8 +331,7 @@ function renderSurface(
     Math.floor(bounds.left),
     Math.ceil(bounds.right),
     Math.floor(bounds.top),
-    Math.ceil(bounds.bottom),
-    ...(world.colonies?.map((colony) => Math.floor(colony.underground.dirtMound)) ?? [Math.floor(world.underground.dirtMound)])
+    Math.ceil(bounds.bottom)
   ].join(":");
   if (scene.staticKey !== staticKey) {
     rebuildSurfaceStatic(scene, world, cell, bounds, staticKey);
@@ -373,37 +372,127 @@ function rebuildSurfaceStatic(scene: SurfaceScene, world: WorldSnapshot, cell: n
   scene.staticKey = staticKey;
 }
 
+function hash2(x: number, y: number, salt = 0): number {
+  const value = Math.sin((x * 127.1 + y * 311.7 + salt * 74.7) * 0.0174533) * 43758.5453123;
+  return value - Math.floor(value);
+}
+
+function drawPebble(root: Graphics, x: number, y: number, size: number, shade: number): void {
+  root.ellipse(x + size * 0.18, y + size * 0.22, size * 0.62, size * 0.45).fill({ color: 0x2f2923, alpha: 0.42 });
+  root.ellipse(x, y, size * 0.68, size * 0.5).fill(shade);
+  root.ellipse(x - size * 0.18, y - size * 0.16, size * 0.22, size * 0.13).fill({ color: 0xe0dcd1, alpha: 0.48 });
+  root.ellipse(x + size * 0.22, y + size * 0.12, size * 0.28, size * 0.16).fill({ color: 0x69655f, alpha: 0.72 });
+}
+
+function drawGrassTuft(root: Graphics, x: number, y: number, scale: number, rotation: number): void {
+  const colors = [0x1f5d31, 0x2f7b3d, 0x184b27];
+  root.setStrokeStyle({ width: Math.max(1, scale * 0.55), color: colors[Math.floor(hash2(x, y, 4) * colors.length)], alpha: 0.95 });
+  for (let blade = -2; blade <= 2; blade += 1) {
+    const angle = rotation + blade * 0.42;
+    const length = scale * (4.2 + hash2(x + blade, y, 5) * 3.6);
+    root.moveTo(x, y);
+    root.lineTo(x + Math.cos(angle) * length, y + Math.sin(angle) * length);
+  }
+  root.stroke();
+}
+
+function drawLeaf(root: Graphics, x: number, y: number, scale: number, rotation: number): void {
+  const dx = Math.cos(rotation);
+  const dy = Math.sin(rotation);
+  const color = hash2(x, y, 7) > 0.5 ? 0x7a6b24 : 0x3f7a2d;
+  root.ellipse(x, y, scale * 2.7, scale * 1.05).fill({ color, alpha: 0.9 });
+  root.setStrokeStyle({ width: 1, color: 0x2f3f1c, alpha: 0.5 });
+  root.moveTo(x - dx * scale * 2.2, y - dy * scale * 2.2);
+  root.lineTo(x + dx * scale * 2.2, y + dy * scale * 2.2);
+  root.stroke();
+}
+
+function drawCrack(root: Graphics, x: number, y: number, scale: number): void {
+  root.setStrokeStyle({ width: 1, color: 0x3b2816, alpha: 0.62 });
+  root.moveTo(x, y);
+  let cx = x;
+  let cy = y;
+  for (let step = 0; step < 4; step += 1) {
+    cx += (hash2(x + step, y, 8) - 0.45) * scale * 4;
+    cy += scale * (1.2 + hash2(x, y + step, 9) * 2);
+    root.lineTo(cx, cy);
+  }
+  root.moveTo(x + scale * 1.2, y + scale * 2.2);
+  root.lineTo(x + scale * (3 + hash2(x, y, 10) * 3), y + scale * (1.5 + hash2(x, y, 11) * 2));
+  root.stroke();
+}
+
 function drawSurfaceGround(root: Container, width: number, height: number, cell: number, bounds: ViewBounds): void {
   const bg = new Graphics();
   const left = Math.max(0, Math.floor(bounds.left));
   const right = Math.min(width, Math.ceil(bounds.right));
   const top = Math.max(0, Math.floor(bounds.top));
   const bottom = Math.min(height, Math.ceil(bounds.bottom));
-  bg.rect(left * cell, top * cell, (right - left) * cell, (bottom - top) * cell).fill(0xb9c98d);
+  bg.rect(left * cell, top * cell, (right - left) * cell, (bottom - top) * cell).fill(0x8a672f);
 
-  for (let y = top; y < bottom; y += 2) {
-    for (let x = left; x < right; x += 2) {
-      const noise = (x * 17 + y * 31 + ((x * y) % 19)) % 9;
-      const color = noise < 2 ? 0xaec17f : noise > 6 ? 0xc4d49a : 0xb9c98d;
-      bg.rect(Math.round(x * cell), Math.round(y * cell), Math.ceil(cell * 2), Math.ceil(cell * 2)).fill(color);
+  for (let y = top; y < bottom; y += 1) {
+    for (let x = left; x < right; x += 1) {
+      const noise = hash2(x, y, 1);
+      const speckle = hash2(x, y, 2);
+      const color = noise < 0.18 ? 0x755222 : noise > 0.82 ? 0x9b783d : speckle > 0.92 ? 0xb09358 : 0x8a672f;
+      bg.rect(Math.round(x * cell), Math.round(y * cell), Math.ceil(cell), Math.ceil(cell)).fill(color);
+      if (speckle > 0.965) {
+        bg.rect(Math.round((x + 0.35) * cell), Math.round((y + 0.35) * cell), Math.max(1, Math.ceil(cell * 0.25)), Math.max(1, Math.ceil(cell * 0.25))).fill(0xc1b07a);
+      } else if (speckle < 0.035) {
+        bg.rect(Math.round((x + 0.45) * cell), Math.round((y + 0.45) * cell), Math.max(1, Math.ceil(cell * 0.2)), Math.max(1, Math.ceil(cell * 0.2))).fill(0x4f3518);
+      }
+    }
+  }
+
+  const decor = new Graphics();
+  const chunkLeft = Math.floor(left / 8) * 8;
+  const chunkRight = Math.ceil(right / 8) * 8;
+  const chunkTop = Math.floor(top / 8) * 8;
+  const chunkBottom = Math.ceil(bottom / 8) * 8;
+  for (let gy = chunkTop; gy <= chunkBottom; gy += 8) {
+    for (let gx = chunkLeft; gx <= chunkRight; gx += 8) {
+      const roll = hash2(gx, gy, 20);
+      const x = (gx + 1 + hash2(gx, gy, 21) * 6) * cell;
+      const y = (gy + 1 + hash2(gx, gy, 22) * 6) * cell;
+      if (x < left * cell - 24 || x > right * cell + 24 || y < top * cell - 24 || y > bottom * cell + 24) {
+        continue;
+      }
+      if (roll > 0.93) {
+        drawPebble(decor, x, y, cell * (1.2 + hash2(gx, gy, 23) * 2.9), hash2(gx, gy, 24) > 0.45 ? 0x9c9a91 : 0xb8b5aa);
+      } else if (roll > 0.86) {
+        drawGrassTuft(decor, x, y, cell * (0.55 + hash2(gx, gy, 25) * 0.55), hash2(gx, gy, 26) * Math.PI * 2);
+      } else if (roll > 0.8) {
+        drawLeaf(decor, x, y, cell * (0.35 + hash2(gx, gy, 27) * 0.38), hash2(gx, gy, 28) * Math.PI * 2);
+      } else if (roll < 0.035) {
+        drawCrack(decor, x, y, cell * (0.45 + hash2(gx, gy, 29) * 0.55));
+      } else if (roll < 0.18) {
+        const stones = 2 + Math.floor(hash2(gx, gy, 30) * 4);
+        for (let index = 0; index < stones; index += 1) {
+          const ox = (hash2(gx + index, gy, 31) - 0.5) * cell * 7;
+          const oy = (hash2(gx, gy + index, 32) - 0.5) * cell * 7;
+          drawPebble(decor, x + ox, y + oy, cell * (0.28 + hash2(gx + index, gy, 33) * 0.36), 0xb4b0a6);
+        }
+      }
     }
   }
 
   const grid = new Graphics();
-  grid.setStrokeStyle({ width: 1, color: 0x87996f, alpha: 0.18 });
-  for (let line = Math.floor(left / 10) * 10; line <= right; line += 10) {
-    const p = Math.round(line * cell);
-    grid.moveTo(p, top * cell);
-    grid.lineTo(p, bottom * cell);
+  if (cell >= 7) {
+    grid.setStrokeStyle({ width: 1, color: 0x5e441f, alpha: 0.08 });
+    for (let line = Math.floor(left / 10) * 10; line <= right; line += 10) {
+      const p = Math.round(line * cell);
+      grid.moveTo(p, top * cell);
+      grid.lineTo(p, bottom * cell);
+    }
+    for (let line = Math.floor(top / 10) * 10; line <= bottom; line += 10) {
+      const p = Math.round(line * cell);
+      grid.moveTo(left * cell, p);
+      grid.lineTo(right * cell, p);
+    }
+    grid.stroke();
   }
-  for (let line = Math.floor(top / 10) * 10; line <= bottom; line += 10) {
-    const p = Math.round(line * cell);
-    grid.moveTo(left * cell, p);
-    grid.lineTo(right * cell, p);
-  }
-  grid.stroke();
 
-  root.addChild(bg, grid);
+  root.addChild(bg, decor, grid);
 }
 
 function drawSurfacePheromones(pheromones: Graphics, world: WorldSnapshot, cell: number, bounds: ViewBounds): void {
@@ -497,14 +586,26 @@ function drawSurfaceEntranceAt(root: Container, pos: Vec2, cell: number, color: 
   const x = Math.round(pos.x * cell);
   const y = Math.round(pos.y * cell);
   const entrance = new Graphics();
-  const mound = color === "red" ? 0x9a513f : 0x8d6a3e;
-  const soil = color === "red" ? 0x7d3b32 : 0x73502f;
+  const mound = color === "red" ? 0x936245 : 0x8f6a38;
+  const moundLight = color === "red" ? 0xbc8a63 : 0xb99155;
+  const soil = color === "red" ? 0x6f3a25 : 0x65411e;
 
-  entrance.ellipse(x, y + 12, 31, 12).fill({ color: mound, alpha: 0.92 });
-  entrance.ellipse(x - 10, y + 8, 20, 8).fill({ color: soil, alpha: 0.88 });
-  entrance.ellipse(x + 12, y + 10, 15, 6).fill({ color: 0xc09868, alpha: 0.42 });
-  entrance.ellipse(x, y + 3, 15, 12).fill(0x2a1a12);
-  entrance.ellipse(x, y + 5, 9, 8).fill(0x0c0806);
+  entrance.ellipse(x + 2, y + 13, 40, 24).fill({ color: 0x4a2f16, alpha: 0.38 });
+  entrance.ellipse(x, y + 10, 32, 20).fill({ color: mound, alpha: 0.96 });
+  entrance.ellipse(x - 5, y + 9, 24, 15).fill({ color: moundLight, alpha: 0.46 });
+  entrance.ellipse(x + 7, y + 16, 21, 9).fill({ color: soil, alpha: 0.34 });
+  entrance.ellipse(x, y + 1, 15, 12).fill(0x1e120c);
+  entrance.ellipse(x, y + 3, 10, 8).fill(0x050302);
+
+  for (let index = 0; index < 18; index += 1) {
+    const angle = index * 2.399963229728653;
+    const radius = 17 + hash2(pos.x + index, pos.y, 40) * 16;
+    const px = x + Math.cos(angle) * radius;
+    const py = y + 10 + Math.sin(angle) * radius * 0.48;
+    const size = cell * (0.16 + hash2(pos.x, pos.y + index, 41) * 0.34);
+    entrance.ellipse(px, py, size, size * 0.62).fill({ color: moundLight, alpha: 0.42 + hash2(index, pos.x, 42) * 0.3 });
+  }
+
   entrance.ellipse(x - 19, y - 2, 7, 4).fill({ color: mound, alpha: 0.82 });
   entrance.ellipse(x + 18, y - 1, 8, 4).fill({ color: mound, alpha: 0.74 });
   root.addChild(entrance);
@@ -514,19 +615,6 @@ function drawSurfaceEntrance(root: Container, world: WorldSnapshot, cell: number
   const entrances = world.surface.entrances ?? [world.surface.entrance];
   entrances.forEach((entrance, index) => {
     drawSurfaceEntranceAt(root, entrance, cell, index === 1 ? "red" : "dark");
-    const dirtMound = world.colonies?.[index]?.underground.dirtMound ?? (index === 0 ? world.underground.dirtMound : 0);
-    if (dirtMound <= 0) {
-      return;
-    }
-
-    const x = Math.round(entrance.x * cell);
-    const y = Math.round(entrance.y * cell);
-    const mound = new Graphics();
-    const radius = Math.min(34, 8 + Math.sqrt(dirtMound) * 2.4);
-    const moundColor = index === 1 ? 0x9a513f : 0x8d6a3e;
-    mound.ellipse(x + 21, y + 19, radius, radius * 0.42).fill({ color: moundColor, alpha: 0.82 });
-    mound.ellipse(x + 28, y + 15, radius * 0.48, radius * 0.25).fill({ color: 0xc09868, alpha: 0.55 });
-    root.addChild(mound);
   });
 }
 

@@ -1,0 +1,20 @@
+{
+  "current": {
+    "id": "genome-mqtouokt-2z5ms0",
+    "generation": 1,
+    "genes": {
+      "nurseFraction": 0.507745288059638,
+      "digFraction": 0.12440679091538916,
+      "queenRearBias": 0.5941479676808332,
+      "forageSpread": 0.33353496686735745,
+      "spiderAttackStorage": 6.491667584807791,
+      "layReserve": 19.70916254710305,
+      "refuelThreshold": 430.2265421607217,
+      "spiderAvoid": 6.3857598672723555
+    }
+  },
+  "best": null,
+  "bestFitness": 0,
+  "archive": [],
+  "generationsRun": 0
+}
