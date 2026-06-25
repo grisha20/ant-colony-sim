@@ -21,6 +21,22 @@ function hasNearbyFeeder(world: World, broodId: string): boolean {
   );
 }
 
+function logQueenDeath(world: World, reason: "age" | "stress" | "starve"): void {
+  const { underground } = world;
+  console.log(
+    `[queen-death] colony=${world.colony.id} reason=${reason} tick=${world.tick} stress=${underground.queen.stress} hp=${underground.queen.hp} food=${underground.foodStorage}`
+  );
+}
+
+function nurseryChamberCapacity(world: World): number {
+  return world.underground.grid.reduce(
+    (total, row) =>
+      total +
+      row.filter((tile) => tile.type === "chamber" && tile.roomId === "room-nursery").length,
+    0
+  );
+}
+
 export function updateBrood(world: World): void {
   const matureBroodIds = new Set<string>();
 
@@ -30,7 +46,23 @@ export function updateBrood(world: World): void {
     }
 
     if (brood.stage === "egg" && brood.location === "queen") {
-      brood.progress += 1;
+      if (world.underground.queen.stress >= world.directives.queenRearThreshold) {
+        brood.progress += 1;
+        if (brood.progress >= CONFIG.queenRearTicks && brood.isPrincess) {
+          if (world.underground.princesses.length < CONFIG.maxPrincesses) {
+            world.underground.princesses.push({
+              id: `${brood.id}-princess`,
+              pos: { ...world.underground.queenChamber }
+            });
+          }
+          matureBroodIds.add(brood.id);
+        } else if (brood.progress >= CONFIG.queenRearTicks && world.ants.length < world.colony.nestCapacity) {
+          const worker = createWorkerAnt(world.underground.queenChamber, "underground", world.colony.id, CONFIG.queenRearStrength);
+          worker.energy = CONFIG.maxEnergy;
+          world.ants.push(worker);
+          matureBroodIds.add(brood.id);
+        }
+      }
       continue;
     }
 
@@ -64,7 +96,7 @@ export function updateBrood(world: World): void {
         }
         matureBroodIds.add(brood.id);
       } else if (brood.progress >= growthNeeded && world.ants.length < world.colony.nestCapacity) {
-        const worker = createWorkerAnt(world.underground.nursery, "underground", world.colony.id);
+        const worker = createWorkerAnt(world.underground.nursery, "underground", world.colony.id, 1);
         worker.energy = CONFIG.maxEnergy;
         world.ants.push(worker);
         matureBroodIds.add(brood.id);
@@ -91,6 +123,7 @@ export function updateQueen(world: World): void {
 
   underground.queen.age += 1;
   if (underground.queen.age >= CONFIG.queenMaxAge) {
+    logQueenDeath(world, "age");
     underground.queen.alive = false;
     return;
   }
@@ -99,9 +132,11 @@ export function updateQueen(world: World): void {
     (brood) =>
       brood.stage === "egg" &&
       brood.location === "queen" &&
+      !brood.isPrincess &&
       Math.hypot(brood.pos.x - underground.queenChamber.x, brood.pos.y - underground.queenChamber.y) <= CONFIG.undergroundNodeRadius * 2
   );
-  const crowdedEggs = Math.max(0, eggsNearQueen.length - CONFIG.queenEggComfortLimit);
+  const nurseryHasAnyChamber = nurseryChamberCapacity(world) > 0;
+  const crowdedEggs = nurseryHasAnyChamber ? Math.max(0, eggsNearQueen.length - CONFIG.queenEggComfortLimit) : 0;
   underground.queen.stress = clamp(
     underground.queen.stress + (crowdedEggs > 0 ? CONFIG.queenStressPerTick * crowdedEggs : -CONFIG.queenStressReliefPerTick),
     0,
@@ -111,12 +146,14 @@ export function updateQueen(world: World): void {
   if (underground.queen.stress > 70) {
     underground.queen.hp -= CONFIG.queenStressDamage;
     if (underground.queen.hp <= 0) {
+      logQueenDeath(world, "stress");
       underground.queen.alive = false;
       return;
     }
   }
 
   if (underground.queen.stress > 90 && Math.random() < CONFIG.queenHighStressDeathChance) {
+    logQueenDeath(world, "stress");
     underground.queen.alive = false;
     return;
   }
@@ -128,6 +165,7 @@ export function updateQueen(world: World): void {
     } else {
       underground.queen.starve += 1;
       if (underground.queen.starve >= CONFIG.queenStarveBuffer) {
+        logQueenDeath(world, "starve");
         underground.queen.alive = false;
         return;
       }
@@ -141,6 +179,7 @@ export function updateQueen(world: World): void {
   if (
     underground.queen.layCooldown <= 0 &&
     queenHasEggSpace &&
+    underground.queen.stress < world.directives.queenRearThreshold &&
     underground.foodStorage >= world.directives.layReserve + CONFIG.eggCost &&
     totalPopulation < colony.nestCapacity
   ) {

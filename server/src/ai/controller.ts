@@ -12,6 +12,8 @@ export type ColonyDirectives = {
   foragerTarget: number;
   activeTarget: number;
   nurseTarget: number;
+  diggerTarget: number;
+  queenRearThreshold: number;
 };
 
 export type FitnessState = {
@@ -55,6 +57,8 @@ export function computeDirectives(world: World, genome: Genome): ColonyDirective
     0,
     Math.min(CONFIG.maxDirectiveNurses, nurseTarget)
   );
+  const diggerTarget = clamp(Math.round(workerCount * genome.genes.digFraction), 0, CONFIG.maxDiggers);
+  const queenRearThreshold = clamp(85 - genome.genes.queenRearBias * 50, 35, 85);
 
   return {
     maxNurses,
@@ -81,7 +85,9 @@ export function computeDirectives(world: World, genome: Genome): ColonyDirective
     ),
     foragerTarget: activeTarget,
     activeTarget,
-    nurseTarget
+    nurseTarget,
+    diggerTarget,
+    queenRearThreshold
   };
 }
 

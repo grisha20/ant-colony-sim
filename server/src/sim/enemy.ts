@@ -357,7 +357,7 @@ export function updateEnemies(world: World): void {
         }
 
         if (ant.state === "fight") {
-          enemy.hp -= CONFIG.antDamagePerTick;
+          enemy.hp -= CONFIG.antDamagePerTick * ant.strength;
         }
       }
     }

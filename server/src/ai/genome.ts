@@ -6,6 +6,8 @@ export type Gene = number;
 
 export type GenomeGenes = {
   nurseFraction: Gene;
+  digFraction: Gene;
+  queenRearBias: Gene;
   forageSpread: Gene;
   spiderAttackStorage: Gene;
   layReserve: Gene;
@@ -36,6 +38,8 @@ type GeneName = keyof GenomeGenes;
 
 const geneNames: GeneName[] = [
   "nurseFraction",
+  "digFraction",
+  "queenRearBias",
   "forageSpread",
   "spiderAttackStorage",
   "layReserve",
@@ -56,6 +60,8 @@ function clampGene(name: GeneName, value: number): number {
 function defaultGenes(): GenomeGenes {
   return {
     nurseFraction: clampGene("nurseFraction", CONFIG.maxConcurrentNurses / Math.max(1, CONFIG.startingWorkers + CONFIG.startingEggs)),
+    digFraction: clampGene("digFraction", 0.15),
+    queenRearBias: clampGene("queenRearBias", 0.6),
     forageSpread: clampGene("forageSpread", CONFIG.randomWander),
     spiderAttackStorage: clampGene("spiderAttackStorage", CONFIG.starveStorageThreshold),
     layReserve: clampGene("layReserve", CONFIG.queenMinFoodReserve),
@@ -73,6 +79,8 @@ function normalizeGenome(genome: Partial<Genome> | null | undefined, fallbackGen
     generation: Math.max(1, Math.floor(genome?.generation ?? fallbackGeneration)),
     genes: {
       nurseFraction: clampGene("nurseFraction", Number(genes.nurseFraction ?? fallback.nurseFraction)),
+      digFraction: clampGene("digFraction", Number(genes.digFraction ?? fallback.digFraction)),
+      queenRearBias: clampGene("queenRearBias", Number(genes.queenRearBias ?? fallback.queenRearBias)),
       forageSpread: clampGene("forageSpread", Number(genes.forageSpread ?? fallback.forageSpread)),
       spiderAttackStorage: clampGene(
         "spiderAttackStorage",

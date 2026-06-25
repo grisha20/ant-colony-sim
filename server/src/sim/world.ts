@@ -123,7 +123,8 @@ export function addFoodSource(world: World, x: number, y: number, amount: number
 export function createWorkerAnt(
   pos: { x: number; y: number },
   layer: "surface" | "underground" = "underground",
-  colonyId = "colony-1"
+  colonyId = "colony-1",
+  strength = 1
 ): Ant {
   const id = `ant-${nextAntId}`;
   nextAntId += 1;
@@ -132,6 +133,7 @@ export function createWorkerAnt(
     id,
     colonyId,
     role: "worker",
+    strength,
     layer,
     state: layer === "underground" ? "idle" : "search",
     pos: {
@@ -167,7 +169,9 @@ function makeDefaultDirectives(): ColonyDirectives {
     spiderAvoidRadius: CONFIG.spiderAvoidRadius,
     foragerTarget: CONFIG.minForagers,
     activeTarget: CONFIG.minForagers,
-    nurseTarget: 0
+    nurseTarget: 0,
+    diggerTarget: Math.min(CONFIG.maxDiggers, Math.round(CONFIG.startingWorkers * 0.15)),
+    queenRearThreshold: CONFIG.queenRearStressThreshold
   };
 }
 
@@ -352,7 +356,12 @@ export function worldFromSnapshot(
         spiderGeneration: spiderGenomeState.current.generation,
         spiderGenerationsRun: spiderGenomeState.generationsRun
       },
-      ants: colonySnapshot.ants.map((ant) => ({ ...ant, colonyId: colonySnapshot.id })),
+      ants: colonySnapshot.ants.map((ant) => ({
+        ...ant,
+        colonyId: colonySnapshot.id,
+        strength: ant.strength ?? 1,
+        dirtLoad: ant.dirtLoad ?? 0
+      })),
       genomeState: genomeStates[index] ?? genomeState,
       directives: makeDefaultDirectives(),
       fitness: createFitnessState(),

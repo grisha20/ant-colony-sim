@@ -281,6 +281,35 @@ function hasDugRoom(world: World, type: "storage" | "nursery" | "queen" | "egg" 
   return world.underground.rooms.some((room) => room.type === type);
 }
 
+function nurseryRoom(world: World) {
+  return world.underground.rooms.find((room) => room.type === "nursery");
+}
+
+function nurseryHasSpace(world: World): boolean {
+  const room = nurseryRoom(world);
+  return !!room && room.used < room.capacity;
+}
+
+function nurseryDropPos(world: World): Vec2 | null {
+  const tiles: Vec2[] = [];
+  for (let y = 0; y < world.underground.grid.length; y += 1) {
+    const row = world.underground.grid[y];
+    for (let x = 0; x < row.length; x += 1) {
+      const tile = row[x];
+      if (tile.type === "chamber" && tile.roomId === "room-nursery") {
+        tiles.push({ x, y });
+      }
+    }
+  }
+
+  const nearest = tiles.sort(
+    (a, b) =>
+      distance(tileCenter(a), world.underground.nursery) -
+      distance(tileCenter(b), world.underground.nursery)
+  )[0];
+  return nearest ? tileCenter(nearest) : null;
+}
+
 function getBrood(world: World, broodId: string | undefined): Brood | undefined {
   if (!broodId) {
     return undefined;
@@ -437,8 +466,8 @@ function handleEnemyColonyCombat(world: World, ant: Ant): boolean {
   if (nearest && nearest.distance <= CONFIG.antCombatRadius) {
     ant.state = "fight";
     ant.heading = normalize({ x: nearest.ant.pos.x - ant.pos.x, y: nearest.ant.pos.y - ant.pos.y });
-    nearest.ant.energy -= CONFIG.antVsAntDamage;
-    ant.energy -= CONFIG.antVsAntDamage * 0.55;
+    nearest.ant.energy -= CONFIG.antVsAntDamage * ant.strength;
+    ant.energy -= CONFIG.antVsAntDamage * 0.55 * nearest.ant.strength;
     if (nearest.ant.energy <= 0) {
       nearest.ant.state = "dead";
     }
@@ -553,6 +582,10 @@ function needsBroodTransport(brood: Brood): boolean {
 }
 
 function pendingBroodTransportCount(world: World): number {
+  if (!nurseryHasSpace(world) || !nurseryDropPos(world)) {
+    return 0;
+  }
+
   return world.underground.brood.filter((brood) => needsBroodTransport(brood) && !brood.carriedBy && !hasAssignedCarrier(world, brood.id)).length;
 }
 
@@ -588,6 +621,12 @@ function moveCarryingBrood(world: World, ant: Ant): void {
   }
 
   if (!brood.carriedBy) {
+    if (brood.location === "queen" && (!nurseryHasSpace(world) || !nurseryDropPos(world))) {
+      ant.broodId = undefined;
+      ant.state = "idle";
+      ant.job = "idle";
+      return;
+    }
     if (brood.location === "nursery" && !hasDugRoom(world, "nursery")) {
       ant.broodId = undefined;
       ant.state = "idle";
@@ -610,9 +649,17 @@ function moveCarryingBrood(world: World, ant: Ant): void {
     return;
   }
 
-  if (distance(ant.pos, world.underground.nursery) <= CONFIG.undergroundNodeRadius) {
+  const dropPos = nurseryDropPos(world);
+  if (!dropPos) {
+    ant.broodId = undefined;
+    ant.state = "idle";
+    ant.job = "idle";
+    return;
+  }
+
+  if (distance(ant.pos, dropPos) <= CONFIG.undergroundNodeRadius) {
     brood.location = "nursery";
-    brood.pos = { ...world.underground.nursery };
+    brood.pos = { ...dropPos };
       brood.carriedBy = undefined;
       ant.broodId = undefined;
       ant.state = "idle";
@@ -620,7 +667,7 @@ function moveCarryingBrood(world: World, ant: Ant): void {
       return;
   }
 
-  moveUndergroundToNode(world, ant, "nursery");
+  moveUndergroundToward(world, ant, dropPos);
   brood.pos = { ...ant.pos };
 }
 
@@ -652,7 +699,7 @@ function moveFeedingBrood(world: World, ant: Ant): void {
 }
 
 function assignNurseTask(world: World, ant: Ant): boolean {
-  const nurseryReady = hasDugRoom(world, "nursery");
+  const nurseryReady = hasDugRoom(world, "nursery") && nurseryHasSpace(world) && !!nurseryDropPos(world);
   const broodToMove = nurseryReady
     ? world.underground.brood.find((brood) => needsBroodTransport(brood) && !brood.carriedBy && !hasAssignedCarrier(world, brood.id))
     : undefined;
@@ -661,7 +708,7 @@ function assignNurseTask(world: World, ant: Ant): boolean {
   if (
     ant.state !== "idle" ||
     ant.carrying > 0 ||
-    ant.energy < world.directives.refuelThreshold ||
+    (ant.energy < world.directives.refuelThreshold && !broodToMove) ||
     busyNurseCount(world) >= nurseDemand
   ) {
     return false;
@@ -711,6 +758,7 @@ function moveCarryingDirt(world: World, ant: Ant): boolean {
   ant.carryingDirt = true;
   if (distance(ant.pos, world.underground.entrance) <= CONFIG.undergroundNodeRadius) {
     clearDigAssignment(ant);
+    ant.dirtLoad = 0;
     ant.state = "idle";
     ant.job = "idle";
     return true;
@@ -734,6 +782,12 @@ function moveDigging(world: World, ant: Ant): boolean {
   if (!target || world.underground.grid[target.tile.y]?.[target.tile.x]?.type !== "soil") {
     const next = findDigTarget(world.underground, assignedDigTargets(world, ant));
     if (!next) {
+      if ((ant.dirtLoad ?? 0) > 0) {
+        ant.carryingDirt = true;
+        ant.state = "carryDirt";
+        ant.job = "carryDirt";
+        return true;
+      }
       clearDigAssignment(ant);
       return false;
     }
@@ -765,10 +819,16 @@ function moveDigging(world: World, ant: Ant): boolean {
   }
 
   if (current.digProgress >= CONFIG.digProgressPerTile && completeDigTile(world.underground, target.taskId, target.tile)) {
-    ant.carryingDirt = true;
-    ant.state = "carryDirt";
-    ant.job = "carryDirt";
+    ant.dirtLoad = (ant.dirtLoad ?? 0) + 1;
     ant.digProgress = 0;
+    ant.digTaskId = undefined;
+    ant.digTarget = undefined;
+    ant.digStandPos = undefined;
+    if (ant.dirtLoad >= CONFIG.dirtCarryBatch) {
+      ant.carryingDirt = true;
+      ant.state = "carryDirt";
+      ant.job = "carryDirt";
+    }
   }
   return true;
 }
@@ -785,7 +845,7 @@ function assignDigTask(world: World, ant: Ant): boolean {
   const activeDiggers = world.ants.filter(
     (other) => other.layer === "underground" && (other.state === "dig" || other.state === "carryDirt")
   ).length;
-  if (activeDiggers >= CONFIG.maxDiggers) {
+  if (activeDiggers >= world.directives.diggerTarget) {
     return false;
   }
 
@@ -817,9 +877,10 @@ function pickupFoodIfReached(world: World, ant: Ant, foodIndex: number): boolean
     return false;
   }
 
-  source.amount = Math.max(0, source.amount - 1);
+  const amount = Math.min(source.amount, Math.max(0, ant.strength));
+  source.amount = Math.max(0, source.amount - amount);
   ant.energy = CONFIG.maxEnergy;
-  ant.carrying = 1;
+  ant.carrying = amount;
   ant.state = "carry";
   return true;
 }

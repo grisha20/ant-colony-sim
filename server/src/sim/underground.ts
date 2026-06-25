@@ -358,6 +358,24 @@ function completeNurseryRoom(underground: Underground): void {
   underground.rooms.push(createNurseryRoom());
 }
 
+function nurseryChamberCapacity(underground: Underground): number {
+  return underground.grid.reduce(
+    (total, row) =>
+      total +
+      row.filter((tile) => tile.type === "chamber" && tile.roomId === "room-nursery").length,
+    0
+  );
+}
+
+function syncNurseryCapacity(underground: Underground): void {
+  const nursery = underground.rooms.find((room) => room.type === "nursery");
+  if (!nursery) {
+    return;
+  }
+
+  nursery.capacity = nurseryChamberCapacity(underground);
+}
+
 function completeEggRoom(underground: Underground): void {
   if (underground.rooms.some((room) => room.type === "egg")) {
     return;
@@ -470,6 +488,12 @@ function makeExpandRoomTask(underground: Underground, room: UndergroundRoom): Di
   };
 }
 
+function hasUnfinishedBaseRoomTask(underground: Underground, roomType: UndergroundRoom["type"]): boolean {
+  return underground.digTasks.some(
+    (task) => task.type === "digRoom" && task.roomType === roomType && task.status !== "done"
+  );
+}
+
 function completeRoomExpansion(underground: Underground, task: DigTask): void {
   if (!task.roomType) {
     return;
@@ -548,6 +572,9 @@ export function completeDigTile(underground: Underground, taskId: string | undef
 
   setTile(underground.grid, tile.x, tile.y, tileTypeForTask(task, tile), roomIdForTask(task));
   underground.dirtMound += CONFIG.dirtPerDugTile;
+  if (task.roomType === "nursery") {
+    syncNurseryCapacity(underground);
+  }
   refreshDigTasks(underground);
   return true;
 }
@@ -570,13 +597,13 @@ export function refreshDigTasks(underground: Underground): void {
     underground.digTasks.push(makeStorageDigTask(underground));
   }
 
-  const hasEggs = underground.brood.some((brood) => brood.stage === "egg");
-  if (hasEggs && !underground.rooms.some((room) => room.type === "egg") && !hasRoomTask(underground, "egg")) {
-    underground.digTasks.unshift(makeEggRoomDigTask(underground));
-  }
-
   for (const room of underground.rooms) {
-    if (room.type === "queen" || hasRoomTask(underground, room.type) || room.used < room.capacity) {
+    if (
+      room.type === "queen" ||
+      hasRoomTask(underground, room.type) ||
+      hasUnfinishedBaseRoomTask(underground, room.type) ||
+      room.used < room.capacity
+    ) {
       continue;
     }
 
@@ -590,6 +617,16 @@ export function refreshDigTasks(underground: Underground): void {
     task.completedTiles = task.targetTiles.filter((tile) => underground.grid[tile.y]?.[tile.x]?.type !== "soil").length;
     if (task.status === "done") {
       continue;
+    }
+
+    if (
+      task.type === "digRoom" &&
+      task.roomType === "nursery" &&
+      task.completedTiles >= 1 &&
+      !underground.rooms.some((room) => room.type === "nursery")
+    ) {
+      completeNurseryRoom(underground);
+      syncNurseryCapacity(underground);
     }
 
     if (task.type !== "expandRoom" && task.roomType === "storage" && isStorageUsable(underground)) {
@@ -612,6 +649,7 @@ export function refreshDigTasks(underground: Underground): void {
     }
   }
 
+  syncNurseryCapacity(underground);
   updateRoomUsage(underground);
 }
 

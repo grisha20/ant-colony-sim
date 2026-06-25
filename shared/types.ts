@@ -66,6 +66,7 @@ export type Ant = {
   id: string;
   colonyId: string;
   role: "worker";
+  strength: number;
   job?: "forage" | "nurse" | "dig" | "carryDirt" | "idle";
   layer: Layer;
   state: AntState;
@@ -75,6 +76,7 @@ export type Ant = {
   heading: Vec2;
   broodId?: string;
   carryingDirt?: boolean;
+  dirtLoad?: number;
   digTaskId?: string;
   digTarget?: Vec2;
   digStandPos?: Vec2;
