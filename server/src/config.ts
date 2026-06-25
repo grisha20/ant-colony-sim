@@ -122,7 +122,7 @@ export const CONFIG = {
   queenStressDirtyEggTicks: 50,
   queenStressReliefPerTick: 2,
   queenHighStressDeathChance: 0.01,
-  queenMaxAge: 8000,
+  queenMaxAge: 60000,
   princessGrowthMult: 3,
   princessChance: 0.05,
   maxPrincesses: 3,
@@ -151,6 +151,10 @@ export const CONFIG = {
   carrionCount: 4,
   carrionAmount: 40,
   carrionRespawnEveryTicks: 2000,
+  antCorpseFood: 12,
+  foodGrowEveryTicks: 450,
+  foodGrowAmount: 28,
+  maxFoodSources: 14,
 
   // Surface spider: a wandering danger that becomes food only when the starving colony attacks it.
   spiderMaxHp: 800,

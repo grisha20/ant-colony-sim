@@ -214,6 +214,10 @@ function createEggRoom(bounds = roomBounds(CONFIG.eggRoomPos, CONFIG.plannedEggR
   return createRoomFromBounds("room-egg", "egg", bounds, CONFIG.plannedEggRoomCapacity);
 }
 
+function createEggRoomFromBounds(id: string, bounds: { x: number; y: number; width: number; height: number }): UndergroundRoom {
+  return createRoomFromBounds(id, "egg", bounds, CONFIG.plannedEggRoomCapacity);
+}
+
 function seededNoise(seed: number, x: number, y: number): number {
   const value = Math.sin((x + seed * 17.17) * 12.9898 + (y - seed * 9.31) * 78.233) * 43758.5453;
   return value - Math.floor(value);
@@ -468,10 +472,20 @@ function makeStorageDigTask(underground: Underground): DigTask {
   };
 }
 
-function makeOverflowRoomDigTask(underground: Underground, roomType: "storage" | "nursery"): DigTask {
+function makeOverflowRoomDigTask(underground: Underground, roomType: "storage" | "nursery" | "egg"): DigTask {
   const roomId = nextRoomId(underground, roomType);
-  const width = roomType === "storage" ? CONFIG.plannedStorageRoomWidth : CONFIG.plannedNurseryRoomWidth;
-  const height = roomType === "storage" ? CONFIG.plannedStorageRoomHeight : CONFIG.plannedNurseryRoomHeight;
+  const width =
+    roomType === "storage"
+      ? CONFIG.plannedStorageRoomWidth
+      : roomType === "egg"
+        ? CONFIG.plannedEggRoomWidth
+        : CONFIG.plannedNurseryRoomWidth;
+  const height =
+    roomType === "storage"
+      ? CONFIG.plannedStorageRoomHeight
+      : roomType === "egg"
+        ? CONFIG.plannedEggRoomHeight
+        : CONFIG.plannedNurseryRoomHeight;
   const roomPlan = chooseRoomPlan(underground, roomType, width, height);
   const targets = uniqueTiles([
     ...tunnelToRoomTiles(underground, roomPlan),
@@ -494,24 +508,8 @@ function makeNurseryDigTask(underground: Underground): DigTask {
   return makeOverflowRoomDigTask(underground, "nursery");
 }
 
-function eggRoomTargetTiles(): Vec2[] {
-  const room = createEggRoom();
-  return uniqueTiles([
-    ...organicTunnelTiles([CONFIG.queenPos, { x: 42, y: 77 }, CONFIG.eggRoomPos]),
-    ...ovalTiles(room.x, room.y, room.width, room.height)
-  ]);
-}
-
 function makeEggRoomDigTask(underground: Underground): DigTask {
-  const targets = eggRoomTargetTiles().filter((tile) => inBounds(underground.grid, tile.x, tile.y));
-  return {
-    id: `dig-egg-${underground.digTasks.length + 1}`,
-    type: "digRoom",
-    roomType: "egg",
-    targetTiles: targets,
-    completedTiles: targets.filter((tile) => underground.grid[tile.y]?.[tile.x]?.type !== "soil").length,
-    status: "planned"
-  };
+  return makeOverflowRoomDigTask(underground, "egg");
 }
 
 function completeStorageRoom(underground: Underground, bounds?: { x: number; y: number; width: number; height: number }, id = "room-storage"): void {
@@ -562,12 +560,32 @@ function syncNurseryCapacity(underground: Underground): void {
   }
 }
 
+function syncEggRoomCapacity(underground: Underground): void {
+  for (const room of roomsOfType(underground, "egg")) {
+    room.capacity = Math.min(CONFIG.plannedEggRoomCapacity, chamberCapacityForRoom(underground, room.id));
+  }
+}
+
 function completeEggRoom(underground: Underground): void {
-  if (underground.rooms.some((room) => room.type === "egg")) {
+  completeEggRoomById(underground);
+}
+
+function completeEggRoomById(underground: Underground, bounds?: { x: number; y: number; width: number; height: number }, id = "room-egg"): void {
+  if (underground.rooms.some((room) => room.id === id)) {
     return;
   }
 
-  underground.rooms.push(createEggRoom());
+  const room = createEggRoomFromBounds(
+    id,
+    bounds ??
+      chooseRoomPlan(
+        underground,
+        "egg",
+        CONFIG.plannedEggRoomWidth,
+        CONFIG.plannedEggRoomHeight
+      )
+  );
+  underground.rooms.push(room);
 }
 
 function isStorageUsable(underground: Underground): boolean {
@@ -716,8 +734,14 @@ function digTaskStillNeeded(underground: Underground, task: DigTask): boolean {
   if (task.roomType === "nursery") {
     const nurseryCapacity = totalRoomCapacity(underground, "nursery");
     const nurseryUsed = underground.brood.filter((brood) => brood.location === "nursery").length;
+    const eggsWaitingForNursery = underground.brood.some((brood) => brood.stage === "egg" && brood.location === "egg");
+    return nurseryCapacity === 0 ? eggsWaitingForNursery : nurseryUsed >= nurseryCapacity;
+  }
+  if (task.roomType === "egg") {
+    const eggCapacity = totalRoomCapacity(underground, "egg");
+    const eggUsed = underground.brood.filter((brood) => brood.location === "egg").length;
     const queenEggs = underground.brood.some((brood) => brood.stage === "egg" && brood.location === "queen");
-    return nurseryCapacity === 0 ? queenEggs : nurseryUsed >= nurseryCapacity;
+    return eggCapacity === 0 ? queenEggs : eggUsed >= eggCapacity;
   }
   return true;
 }
@@ -806,6 +830,12 @@ export function completeDigTile(underground: Underground, taskId: string | undef
     }
     syncNurseryCapacity(underground);
   }
+  if (task.roomType === "egg" && task.roomPlan && !underground.rooms.some((room) => room.id === (task.roomId ?? "room-egg"))) {
+    completeEggRoomById(underground, task.roomPlan, task.roomId ?? "room-egg");
+  }
+  if (task.roomType === "egg") {
+    syncEggRoomCapacity(underground);
+  }
   refreshDigTasks(underground);
   return true;
 }
@@ -817,11 +847,14 @@ export function ensureDiggableUnderground(underground: Underground): Underground
     grid: underground.grid ?? layer.grid,
     rooms: underground.rooms ?? layer.rooms,
     digTasks: underground.digTasks ?? layer.digTasks,
-    dirtMound: underground.dirtMound ?? layer.dirtMound
+    dirtMound: underground.dirtMound ?? layer.dirtMound,
+    carrion: underground.carrion ?? []
   };
 }
 
 export function refreshDigTasks(underground: Underground): void {
+  syncNurseryCapacity(underground);
+  syncEggRoomCapacity(underground);
   updateRoomUsage(underground);
 
   if (!isStorageRoomDug(underground) && !hasStorageTask(underground)) {
@@ -841,6 +874,7 @@ export function refreshDigTasks(underground: Underground): void {
       room.type === "queen" ||
       room.type === "storage" ||
       room.type === "nursery" ||
+      room.type === "egg" ||
       hasRoomTask(underground, room.type) ||
       hasUnfinishedBaseRoomTask(underground, room.type) ||
       room.used < room.capacity
@@ -882,7 +916,7 @@ export function refreshDigTasks(underground: Underground): void {
         completeNurseryRoom(underground, task.roomPlan, task.roomId ?? "room-nursery");
       }
       if (task.roomType === "egg") {
-        completeEggRoom(underground);
+        completeEggRoomById(underground, task.roomPlan, task.roomId ?? "room-egg");
       }
       if (task.type === "expandRoom") {
         completeRoomExpansion(underground, task);
@@ -891,6 +925,7 @@ export function refreshDigTasks(underground: Underground): void {
   }
 
   syncNurseryCapacity(underground);
+  syncEggRoomCapacity(underground);
   updateRoomUsage(underground);
 }
 
@@ -905,17 +940,29 @@ export function planNurseryIfNeeded(underground: Underground): void {
   underground.digTasks.push(makeNurseryDigTask(underground));
 }
 
+export function planEggRoomIfNeeded(underground: Underground): void {
+  updateRoomUsage(underground);
+  const eggCapacity = totalRoomCapacity(underground, "egg");
+  const eggUsed = underground.brood.filter((brood) => brood.location === "egg").length;
+  if (hasRoomTask(underground, "egg") || (eggCapacity > 0 && eggUsed < eggCapacity)) {
+    return;
+  }
+
+  underground.digTasks.push(makeEggRoomDigTask(underground));
+}
+
 export function updateRoomUsage(underground: Underground): void {
   let storageUsed = Math.floor(underground.foodStorage);
   let nurseryUsed = underground.brood.filter((brood) => brood.location === "nursery").length;
-  const eggCount = underground.brood.filter((brood) => brood.stage === "egg").length;
+  let eggUsed = underground.brood.filter((brood) => brood.location === "egg").length;
 
   for (const room of underground.rooms) {
     if (room.type === "storage") {
       room.used = Math.min(room.capacity, Math.max(0, storageUsed));
       storageUsed -= room.used;
     } else if (room.type === "egg") {
-      room.used = eggCount;
+      room.used = Math.min(room.capacity, Math.max(0, eggUsed));
+      eggUsed -= room.used;
     } else if (room.type === "nursery") {
       room.used = Math.min(room.capacity, Math.max(0, nurseryUsed));
       nurseryUsed -= room.used;
@@ -950,6 +997,7 @@ export function createUnderground(colonyId = "colony-1"): Underground {
       age: 0
     },
     brood,
+    carrion: [],
     foodStorage: CONFIG.startingFoodStorage,
     entrance: layout.entrance,
     junction,

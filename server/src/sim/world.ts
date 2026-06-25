@@ -106,6 +106,38 @@ export function respawnCarrion(world: World): void {
   }
 }
 
+export function addAntCorpse(world: World, ant: Ant): FoodSource {
+  const source: FoodSource = {
+    id: `carrion-${nextCarrionId}`,
+    pos: { ...ant.pos },
+    amount: CONFIG.antCorpseFood * Math.max(0.35, ant.strength ?? 1)
+  };
+  nextCarrionId += 1;
+  if (ant.layer === "underground") {
+    world.underground.carrion.push(source);
+  } else {
+    world.surface.carrion.push(source);
+  }
+  return source;
+}
+
+export function growFoodSources(world: World): void {
+  world.surface.foodSources = world.surface.foodSources.filter((source) => source.amount > 0);
+  if (CONFIG.foodGrowEveryTicks <= 0 || world.tick % CONFIG.foodGrowEveryTicks !== 0) {
+    return;
+  }
+
+  for (const source of world.surface.foodSources) {
+    source.amount = Math.min(CONFIG.playerFoodAmount, source.amount + CONFIG.foodGrowAmount * 0.35);
+  }
+
+  if (world.surface.foodSources.length < CONFIG.maxFoodSources) {
+    const minNestDistance = Math.min(CONFIG.mapWidth, CONFIG.mapHeight) * 0.16;
+    const pos = randomSurfacePosAwayFromNest(minNestDistance);
+    addFoodSource(world, pos.x, pos.y, CONFIG.foodGrowAmount * (0.75 + Math.random() * 0.5));
+  }
+}
+
 export function addFoodSource(world: World, x: number, y: number, amount: number): FoodSource {
   const source: FoodSource = {
     id: `food-${nextFoodSourceId}`,
@@ -451,14 +483,14 @@ function normalizeUndergroundSnapshot(
     brood:
       underground.brood?.map((brood) => ({
         ...brood,
-        location: brood.location === "queen" ? "queen" : "nursery",
+        location: brood.location === "queen" ? "queen" : brood.location === "egg" ? "egg" : "nursery",
         isPrincess: brood.isPrincess ?? false
       })) ??
       (underground.eggs ?? []).map(
         (egg): Brood => ({
           id: egg.id.replace("egg-", "brood-"),
           stage: "egg",
-          location: "nursery",
+          location: "egg",
           pos: egg.pos,
           progress: egg.maturity,
           isPrincess: false
@@ -471,7 +503,8 @@ function normalizeUndergroundSnapshot(
     storage: underground.storage ?? CONFIG.storagePos,
     barracksA: underground.barracksA ?? CONFIG.barracksAPos,
     barracksB: underground.barracksB ?? CONFIG.barracksBPos,
-    princesses: underground.princesses ?? []
+    princesses: underground.princesses ?? [],
+    carrion: underground.carrion ?? []
   });
 
   return normalized;

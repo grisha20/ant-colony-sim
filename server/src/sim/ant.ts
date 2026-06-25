@@ -1,4 +1,4 @@
-import type { Ant, Brood, Vec2 } from "../../../shared/types";
+import type { Ant, Brood, UndergroundRoom, Vec2 } from "../../../shared/types";
 import { CONFIG } from "../config";
 import type { UndergroundNode } from "./nav";
 import {
@@ -274,15 +274,17 @@ function guardQueen(world: World, ant: Ant): void {
 }
 
 function broodTarget(world: World, brood: Brood): Vec2 {
-  return brood.location === "queen" ? world.underground.queenChamber : world.underground.nursery;
+  if (brood.location === "queen") {
+    return world.underground.queenChamber;
+  }
+  if (brood.location === "egg") {
+    return world.underground.queenChamber;
+  }
+  return world.underground.nursery;
 }
 
 function hasDugRoom(world: World, type: "storage" | "nursery" | "queen" | "egg" | "barracks"): boolean {
   return world.underground.rooms.some((room) => room.type === type);
-}
-
-function nurseryRoom(world: World) {
-  return world.underground.rooms.find((room) => room.type === "nursery");
 }
 
 function nurseryHasSpace(world: World): boolean {
@@ -292,24 +294,64 @@ function nurseryHasSpace(world: World): boolean {
   return capacity > used;
 }
 
-function nurseryDropPos(world: World): Vec2 | null {
-  const tiles: Vec2[] = [];
+function roomCenter(room: UndergroundRoom): Vec2 {
+  return { x: room.x + room.width / 2, y: room.y + room.height / 2 };
+}
+
+function chamberDropPosInRoom(world: World, room: UndergroundRoom): Vec2 | null {
+  const center = roomCenter(room);
+  let best: Vec2 | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
   for (let y = 0; y < world.underground.grid.length; y += 1) {
     const row = world.underground.grid[y];
     for (let x = 0; x < row.length; x += 1) {
       const tile = row[x];
-      if (tile.type === "chamber" && tile.roomId?.startsWith("room-nursery")) {
-        tiles.push({ x, y });
+      if (tile.type !== "chamber" || tile.roomId !== room.id) {
+        continue;
+      }
+      const pos = tileCenter({ x, y });
+      const dist = distance(pos, center);
+      if (dist < bestDistance) {
+        best = pos;
+        bestDistance = dist;
       }
     }
   }
+  return best;
+}
 
-  const nearest = tiles.sort(
-    (a, b) =>
-      distance(tileCenter(a), world.underground.nursery) -
-      distance(tileCenter(b), world.underground.nursery)
-  )[0];
-  return nearest ? tileCenter(nearest) : null;
+function roomDropPos(world: World, type: "egg" | "nursery"): Vec2 | null {
+  const rooms = world.underground.rooms
+    .filter((room) => room.type === type && room.used < room.capacity)
+    .sort((a, b) => distance(roomCenter(a), world.underground.queenChamber) - distance(roomCenter(b), world.underground.queenChamber));
+
+  for (const room of rooms) {
+    const pos = chamberDropPosInRoom(world, room);
+    if (pos) {
+      return pos;
+    }
+  }
+
+  return null;
+}
+
+function nurseryDropPos(world: World): Vec2 | null {
+  return roomDropPos(world, "nursery");
+}
+
+function eggRooms(world: World) {
+  return world.underground.rooms.filter((room) => room.type === "egg");
+}
+
+function eggRoomHasSpace(world: World): boolean {
+  const rooms = eggRooms(world);
+  const capacity = rooms.reduce((total, room) => total + room.capacity, 0);
+  const used = world.underground.brood.filter((brood) => brood.location === "egg").length;
+  return capacity > used;
+}
+
+function eggDropPos(world: World): Vec2 | null {
+  return roomDropPos(world, "egg");
 }
 
 function getBrood(world: World, broodId: string | undefined): Brood | undefined {
@@ -324,18 +366,20 @@ function assignedFeederCount(world: World, broodId: string): number {
   return world.ants.filter((ant) => ant.layer === "underground" && ant.state === "feed" && ant.broodId === broodId).length;
 }
 
+function surfaceFoodTotal(world: World): number {
+  return [...world.surface.foodSources, ...world.surface.carrion].reduce((total, source) => total + Math.max(0, source.amount), 0);
+}
+
 function isColonyStarving(world: World): boolean {
-  const surfaceFood = world.surface.foodSources.reduce((total, source) => total + Math.max(0, source.amount), 0);
-  return surfaceFood <= CONFIG.starveFoodThreshold && world.underground.foodStorage <= world.directives.spiderAttackStorage;
+  return surfaceFoodTotal(world) <= CONFIG.starveFoodThreshold && world.underground.foodStorage <= world.directives.spiderAttackStorage;
 }
 
 function isColonyWarHungry(world: World): boolean {
-  const surfaceFood = world.surface.foodSources.reduce((total, source) => total + Math.max(0, source.amount), 0);
-  return surfaceFood <= CONFIG.starveFoodThreshold && world.underground.foodStorage <= CONFIG.warHungerThreshold;
+  return surfaceFoodTotal(world) <= CONFIG.starveFoodThreshold && world.underground.foodStorage <= CONFIG.warHungerThreshold;
 }
 
 function hasAvailableSurfaceFood(world: World): boolean {
-  return world.surface.foodSources.some((source) => source.amount > 0);
+  return world.surface.foodSources.some((source) => source.amount > 0) || world.surface.carrion.some((source) => source.amount > 0);
 }
 
 function canUseStorageMeal(world: World, ignoreSurfaceFood = false): boolean {
@@ -584,7 +628,7 @@ function needsBroodTransport(brood: Brood): boolean {
 }
 
 function pendingBroodTransportCount(world: World): number {
-  if (!nurseryHasSpace(world) || !nurseryDropPos(world)) {
+  if (!eggRoomHasSpace(world) || !eggDropPos(world)) {
     return 0;
   }
 
@@ -599,8 +643,16 @@ function activeNurseLaborCount(world: World): number {
   ).length;
 }
 
+function activeDigLaborCount(world: World): number {
+  return world.ants.filter(
+    (ant) =>
+      (ant.layer === "underground" && (ant.state === "dig" || ant.state === "carryDirt" || ant.carryingDirt)) ||
+      (ant.layer === "surface" && ant.job === "dig" && ant.state === "return")
+  ).length;
+}
+
 function needsSurfaceNurseReturn(world: World): boolean {
-  if (!hasDugRoom(world, "nursery") || pendingBroodTransportCount(world) <= 0) {
+  if (!hasDugRoom(world, "egg") || pendingBroodTransportCount(world) <= 0) {
     return false;
   }
 
@@ -623,7 +675,7 @@ function moveCarryingBrood(world: World, ant: Ant): void {
   }
 
   if (!brood.carriedBy) {
-    if (brood.location === "queen" && (!nurseryHasSpace(world) || !nurseryDropPos(world))) {
+    if (brood.location === "queen" && (!eggRoomHasSpace(world) || !eggDropPos(world))) {
       ant.broodId = undefined;
       ant.state = "idle";
       ant.job = "idle";
@@ -652,16 +704,18 @@ function moveCarryingBrood(world: World, ant: Ant): void {
   }
 
   const dropPos = nurseryDropPos(world);
-  if (!dropPos) {
+  const targetLocation = brood.stage === "egg" ? "egg" : "nursery";
+  const targetDropPos = targetLocation === "egg" ? eggDropPos(world) : dropPos;
+  if (!targetDropPos) {
     ant.broodId = undefined;
     ant.state = "idle";
     ant.job = "idle";
     return;
   }
 
-  if (distance(ant.pos, dropPos) <= CONFIG.undergroundNodeRadius) {
-    brood.location = "nursery";
-    brood.pos = { ...dropPos };
+  if (distance(ant.pos, targetDropPos) <= CONFIG.undergroundNodeRadius) {
+    brood.location = targetLocation;
+    brood.pos = { ...targetDropPos };
       brood.carriedBy = undefined;
       ant.broodId = undefined;
       ant.state = "idle";
@@ -669,7 +723,7 @@ function moveCarryingBrood(world: World, ant: Ant): void {
       return;
   }
 
-  moveUndergroundToward(world, ant, dropPos);
+  moveUndergroundToward(world, ant, targetDropPos);
   brood.pos = { ...ant.pos };
 }
 
@@ -701,7 +755,7 @@ function moveFeedingBrood(world: World, ant: Ant): void {
 }
 
 function assignNurseTask(world: World, ant: Ant): boolean {
-  const nurseryReady = hasDugRoom(world, "nursery") && nurseryHasSpace(world) && !!nurseryDropPos(world);
+  const nurseryReady = hasDugRoom(world, "egg") && eggRoomHasSpace(world) && !!eggDropPos(world);
   const broodToMove = nurseryReady
     ? world.underground.brood.find((brood) => needsBroodTransport(brood) && !brood.carriedBy && !hasAssignedCarrier(world, brood.id))
     : undefined;
@@ -740,6 +794,11 @@ function assignNurseTask(world: World, ant: Ant): boolean {
   }
 
   return false;
+}
+
+function needsSurfaceDiggerReturn(world: World): boolean {
+  const hasDigNeed = world.underground.digTasks.some((task) => task.status !== "done");
+  return hasDigNeed && activeDigLaborCount(world) < world.directives.diggerTarget;
 }
 
 function assignedDigTargets(world: World, ant: Ant): Set<string> {
@@ -854,27 +913,35 @@ function assignDigTask(world: World, ant: Ant): boolean {
   return moveDigging(world, ant);
 }
 
-function nearestAvailableFood(world: World, ant: Ant): number {
-  let nearestIndex = -1;
+type SurfaceFoodTarget = {
+  source: { pos: Vec2; amount: number };
+  list: Array<{ pos: Vec2; amount: number }>;
+  index: number;
+};
+
+function nearestAvailableFood(world: World, ant: Ant): SurfaceFoodTarget | null {
+  let nearest: SurfaceFoodTarget | null = null;
   let nearestDistance = Number.POSITIVE_INFINITY;
 
-  world.surface.foodSources.forEach((source, index) => {
-    if (source.amount <= 0) {
-      return;
-    }
+  for (const list of [world.surface.foodSources, world.surface.carrion]) {
+    list.forEach((source, index) => {
+      if (source.amount <= 0) {
+        return;
+      }
 
-    const sourceDistance = distance(ant.pos, source.pos);
-    if (sourceDistance < nearestDistance) {
-      nearestDistance = sourceDistance;
-      nearestIndex = index;
-    }
-  });
+      const sourceDistance = distance(ant.pos, source.pos);
+      if (sourceDistance < nearestDistance) {
+        nearestDistance = sourceDistance;
+        nearest = { source, list, index };
+      }
+    });
+  }
 
-  return nearestIndex;
+  return nearest;
 }
 
-function pickupFoodIfReached(world: World, ant: Ant, foodIndex: number): boolean {
-  const source = world.surface.foodSources[foodIndex];
+function pickupFoodIfReached(world: World, ant: Ant, target: SurfaceFoodTarget): boolean {
+  const source = target.list[target.index];
   if (!source || source.amount <= 0 || distance(ant.pos, source.pos) > CONFIG.foodPickupRadius) {
     return false;
   }
@@ -888,18 +955,18 @@ function pickupFoodIfReached(world: World, ant: Ant, foodIndex: number): boolean
 }
 
 function moveHungryToFood(world: World, ant: Ant): boolean {
-  const foodIndex = nearestAvailableFood(world, ant);
-  if (foodIndex < 0) {
+  const food = nearestAvailableFood(world, ant);
+  if (!food) {
     return false;
   }
 
-  if (pickupFoodIfReached(world, ant, foodIndex)) {
+  if (pickupFoodIfReached(world, ant, food)) {
     return true;
   }
 
   ant.state = "search";
   ant.job = "forage";
-  moveSurfaceToward(world, ant, world.surface.foodSources[foodIndex].pos, !isColonyStarving(world));
+  moveSurfaceToward(world, ant, food.source.pos, !isColonyStarving(world));
   return true;
 }
 
@@ -916,24 +983,32 @@ function moveNurseHome(world: World, ant: Ant): void {
   moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world));
   tryCrossLayer(world, ant);
 }
+
+function moveDiggerHome(world: World, ant: Ant): void {
+  ant.state = "return";
+  ant.job = "dig";
+  moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world));
+  tryCrossLayer(world, ant);
+}
+
 function moveSearching(world: World, ant: Ant): void {
   ant.job = "forage";
   const speed = surfaceMoveSpeed(world, ant);
-  const foodIndex = nearestAvailableFood(world, ant);
-  if (foodIndex >= 0 && pickupFoodIfReached(world, ant, foodIndex)) {
+  const food = nearestAvailableFood(world, ant);
+  if (food && pickupFoodIfReached(world, ant, food)) {
     return;
   }
 
-  if (foodIndex >= 0 && distance(ant.pos, world.surface.foodSources[foodIndex].pos) <= CONFIG.foodDirectApproachRange) {
+  if (food && distance(ant.pos, food.source.pos) <= CONFIG.foodDirectApproachRange) {
     ant.state = "search";
-    moveSurfaceToward(world, ant, world.surface.foodSources[foodIndex].pos, false);
+    moveSurfaceToward(world, ant, food.source.pos, false);
     return;
   }
 
   world.pheromones.home.add(ant.pos.x, ant.pos.y, CONFIG.homePheromoneDeposit);
 
   // Проверяем, есть ли вообще еда на карте
-  const foodAvailable = world.surface.foodSources.some((source) => source.amount > 0);
+  const foodAvailable = hasAvailableSurfaceFood(world);
 
   // Если еды нет, градиент феромонов еды не учитываем (чистая разведка)
   const gradient = foodAvailable
@@ -946,7 +1021,7 @@ function moveSearching(world: World, ant: Ant): void {
 
   const jitter = randomHeading();
   const gradientPower = Math.min(2.5, gradient.strength) * CONFIG.pheromoneGradientWeight;
-  const nearestFood = foodIndex >= 0 ? world.surface.foodSources[foodIndex] : null;
+  const nearestFood = food?.source ?? null;
   const nearestFoodDistance = nearestFood ? distance(ant.pos, nearestFood.pos) : Number.POSITIVE_INFINITY;
   const directFood =
     nearestFood && nearestFoodDistance <= CONFIG.antFoodSightRadius
@@ -1024,6 +1099,51 @@ function moveFighting(world: World, ant: Ant): boolean {
   return true;
 }
 
+function nearestUndergroundCarrion(world: World, ant: Ant): { index: number; pos: Vec2 } | null {
+  let nearest: { index: number; pos: Vec2 } | null = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  world.underground.carrion.forEach((source, index) => {
+    if (source.amount <= 0 || !isDugPos(world, source.pos)) {
+      return;
+    }
+    const sourceDistance = distance(ant.pos, source.pos);
+    if (sourceDistance < nearestDistance) {
+      nearestDistance = sourceDistance;
+      nearest = { index, pos: source.pos };
+    }
+  });
+  return nearest;
+}
+
+function collectUndergroundCarrion(world: World, ant: Ant): boolean {
+  if (ant.state !== "idle" || ant.carrying > 0 || !hasDugRoom(world, "storage")) {
+    return false;
+  }
+
+  const carrion = nearestUndergroundCarrion(world, ant);
+  if (!carrion) {
+    return false;
+  }
+
+  const source = world.underground.carrion[carrion.index];
+  if (!source || source.amount <= 0) {
+    return false;
+  }
+
+  ant.job = "forage";
+  if (distance(ant.pos, source.pos) > CONFIG.foodPickupRadius) {
+    ant.state = "idle";
+    moveUndergroundToward(world, ant, source.pos);
+    return true;
+  }
+
+  const amount = Math.min(source.amount, Math.max(0.35, ant.strength));
+  source.amount = Math.max(0, source.amount - amount);
+  ant.carrying = amount;
+  ant.state = "deposit";
+  return true;
+}
+
 function stepUnderground(world: World, ant: Ant): void {
   maybeFeedUndergroundAnt(world, ant);
 
@@ -1075,6 +1195,10 @@ function stepUnderground(world: World, ant: Ant): void {
     return;
   }
 
+  if (collectUndergroundCarrion(world, ant)) {
+    return;
+  }
+
   if (assignDigTask(world, ant)) {
     return;
   }
@@ -1118,12 +1242,27 @@ function stepSurface(world: World, ant: Ant): void {
     return;
   }
 
+  if (ant.state === "return" && ant.job === "dig" && needsSurfaceDiggerReturn(world)) {
+    moveDiggerHome(world, ant);
+    return;
+  }
+
+  if (ant.carrying <= 0 && needsSurfaceDiggerReturn(world)) {
+    moveDiggerHome(world, ant);
+    return;
+  }
+
   if (ant.carrying <= 0 && needsSurfaceNurseReturn(world)) {
     moveNurseHome(world, ant);
     return;
   }
 
   if (ant.state === "return" || shouldReturnFromSurface(world, ant)) {
+    moveHungryHome(world, ant);
+    return;
+  }
+
+  if (ant.energy < CONFIG.lowEnergyThreshold && canUseStorageMeal(world, true)) {
     moveHungryHome(world, ant);
     return;
   }
@@ -1154,7 +1293,7 @@ export function stepAnt(world: World, ant: Ant): void {
         ant.state = "dead";
         return;
       }
-    } else if (canUseStorageMeal(world)) {
+    } else if (canUseStorageMeal(world, true)) {
       ant.energy = 1;
     } else {
       ant.state = "dead";

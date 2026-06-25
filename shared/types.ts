@@ -57,7 +57,7 @@ export type DigTask = {
 export type Brood = {
   id: string;
   stage: "egg" | "larva";
-  location: "queen" | "nursery";
+  location: "queen" | "egg" | "nursery";
   pos: Vec2;
   carriedBy?: string;
   progress: number;
@@ -109,6 +109,7 @@ export type Underground = {
   dirtMound: number;
   queen: Queen;
   brood: Brood[];
+  carrion: FoodSource[];
   foodStorage: number;
   entrance: Vec2;
   junction: Vec2;

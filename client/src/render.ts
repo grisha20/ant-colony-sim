@@ -59,6 +59,7 @@ type UndergroundScene = {
   root: Container;
   staticLayer: Container;
   storagePool: SpritePool;
+  carrionPool: SpritePool;
   broodPool: SpritePool;
   antPool: SpritePool;
   queen: Sprite;
@@ -228,16 +229,18 @@ function createUndergroundScene(): UndergroundScene {
   const root = new Container();
   const staticLayer = new Container();
   const storageContainer = new Container();
+  const carrionContainer = new Container();
   const eggContainer = new Container();
   const antContainer = new Container();
   const queen = createQueenSprite(4);
 
-  root.addChild(staticLayer, storageContainer, eggContainer, queen, antContainer);
+  root.addChild(staticLayer, storageContainer, carrionContainer, eggContainer, queen, antContainer);
 
   return {
     root,
     staticLayer,
     storagePool: createSpritePool(storageContainer, () => createGrainSprite(2.7)),
+    carrionPool: createSpritePool(carrionContainer, () => createCarrionSprite(2.2)),
     broodPool: createSpritePool(eggContainer, () => createEggSprite(3)),
     antPool: createSpritePool(antContainer, () => createAntSprite(false, 2.6)),
     queen,
@@ -616,6 +619,7 @@ function renderUnderground(scene: UndergroundScene, world: WorldSnapshot, viewpo
   }
 
   updateUndergroundStorage(scene.storagePool, world);
+  updateUndergroundCarrion(scene.carrionPool, world);
   updateUndergroundBrood(scene.broodPool, world);
   updateUndergroundQueen(scene.queen, world);
   updateUndergroundAnts(scene.antPool, world);
@@ -726,11 +730,12 @@ function broodPosition(brood: Brood, world: WorldSnapshot, index: number): Vec2 
     };
   }
 
-  const offset = deterministicOffset(index + brood.id.length, brood.stage === "egg" ? 34 : 24);
+  const clusterRadius = brood.location === "queen" ? 16 : brood.stage === "egg" ? 14 : 12;
+  const offset = deterministicOffset(index + brood.id.length, clusterRadius);
   const base = undergroundToScreen(world, brood.pos);
   return {
-    x: base.x + offset.x * 0.45,
-    y: base.y + offset.y * 0.28
+    x: base.x + offset.x * 0.28,
+    y: base.y + offset.y * 0.2
   };
 }
 
@@ -793,6 +798,26 @@ function updateUndergroundStorage(pool: SpritePool, world: WorldSnapshot): void 
         center.y + 14 + Math.sin(angle) * radiusY,
         (index % 5) * 0.08
       );
+    }
+  }
+
+  endPool(pool);
+}
+
+function updateUndergroundCarrion(pool: SpritePool, world: WorldSnapshot): void {
+  beginPool(pool);
+
+  for (const source of world.underground.carrion) {
+    if (source.amount <= 0 || !isDugUndergroundPos(world, source.pos)) {
+      continue;
+    }
+    const chunks = Math.max(1, Math.min(8, Math.ceil(source.amount / 4)));
+    const base = undergroundToScreen(world, source.pos);
+    for (let index = 0; index < chunks; index += 1) {
+      const sprite = acquireSprite(pool);
+      const offset = deterministicOffset(index + source.id.length * 5, 12);
+      sprite.scale.set(2.1);
+      placeSprite(sprite, base.x + offset.x * 0.38, base.y + offset.y * 0.26, (index % 4) * 0.18);
     }
   }
 

@@ -1,0 +1,20 @@
+{
+  "current": {
+    "id": "genome-mqtmc2nz-tyy0gq",
+    "generation": 1,
+    "genes": {
+      "nurseFraction": 0.5273648050757546,
+      "digFraction": 0.13563386149251427,
+      "queenRearBias": 0.5266643449436592,
+      "forageSpread": 0.34979463768996066,
+      "spiderAttackStorage": 5.719743407386817,
+      "layReserve": 18.16612154068854,
+      "refuelThreshold": 410.35817908790295,
+      "spiderAvoid": 6.678925853126193
+    }
+  },
+  "best": null,
+  "bestFitness": 0,
+  "archive": [],
+  "generationsRun": 0
+}

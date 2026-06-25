@@ -4,10 +4,12 @@ import { CONFIG } from "../config";
 import { stepAnt } from "./ant";
 import { updateBrood, updateQueen } from "./brood";
 import { updateEnemies } from "./enemy";
-import { planNurseryIfNeeded, refreshDigTasks } from "./underground";
+import { planEggRoomIfNeeded, planNurseryIfNeeded, refreshDigTasks } from "./underground";
 import {
+  addAntCorpse,
   colonyWorldView,
   createColonyRuntime,
+  growFoodSources,
   respawnCarrion,
   syncColonyStatsForRuntime,
   syncWorldLegacyFields,
@@ -16,7 +18,7 @@ import {
 } from "./world";
 
 function scentFoodSources(world: World): void {
-  for (const source of world.surface.foodSources) {
+  for (const source of [...world.surface.foodSources, ...world.surface.carrion]) {
     if (source.amount > 0) {
       const radius = CONFIG.foodSourceScentRadius;
       for (let y = Math.floor(source.pos.y - radius); y <= Math.ceil(source.pos.y + radius); y += 1) {
@@ -32,7 +34,13 @@ function scentFoodSources(world: World): void {
   }
 }
 
-function removeDeadAndSyncLayerLists(colony: ColonyRuntime): void {
+function removeDeadAndSyncLayerLists(world: World, colony: ColonyRuntime): void {
+  for (const ant of colony.ants) {
+    if (ant.state === "dead") {
+      addAntCorpse(colonyWorldView(world, colony), ant);
+    }
+  }
+  colony.underground.carrion = colony.underground.carrion.filter((source) => source.amount > 0);
   colony.ants = colony.ants.filter((ant) => ant.state !== "dead");
   colony.underground.ants = colony.ants.filter((ant) => ant.layer === "underground").map((ant) => ant.id);
 }
@@ -102,11 +110,15 @@ export function step(world: World): void {
   world.tick += 1;
 
   respawnCarrion(world);
+  growFoodSources(world);
   scentFoodSources(world);
 
   for (const colony of world.colonies) {
     const scopedWorld = colonyWorldView(world, colony);
     if (colony.underground.brood.some((brood) => brood.stage === "egg" && brood.location === "queen")) {
+      planEggRoomIfNeeded(colony.underground);
+    }
+    if (colony.underground.brood.some((brood) => brood.stage === "egg" && brood.location === "egg")) {
       planNurseryIfNeeded(colony.underground);
     }
     refreshDigTasks(colony.underground);
@@ -124,7 +136,7 @@ export function step(world: World): void {
     updateQueen(scopedWorld);
     updateBrood(scopedWorld);
     refreshDigTasks(colony.underground);
-    removeDeadAndSyncLayerLists(colony);
+    removeDeadAndSyncLayerLists(world, colony);
     updateFitness(scopedWorld);
     evolveAfterQueenDeath(world, colony);
     syncColonyStatsForRuntime(colony);

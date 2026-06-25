@@ -1,6 +1,7 @@
 import { CONFIG } from "../config";
 import { makeBrood } from "./underground";
 import { createWorkerAnt, type World } from "./world";
+import type { UndergroundRoom } from "../../../shared/types";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -28,11 +29,11 @@ function logQueenDeath(world: World, reason: "age" | "stress" | "starve"): void 
   );
 }
 
-function nurseryChamberCapacity(world: World): number {
+function chamberCapacity(world: World, prefix: string): number {
   return world.underground.grid.reduce(
     (total, row) =>
       total +
-      row.filter((tile) => tile.type === "chamber" && tile.roomId?.startsWith("room-nursery")).length,
+      row.filter((tile) => tile.type === "chamber" && tile.roomId?.startsWith(prefix)).length,
     0
   );
 }
@@ -44,8 +45,92 @@ function nurseryHasFreeCapacity(world: World): boolean {
   return capacity > used;
 }
 
+function eggRoomHasFreeCapacity(world: World): boolean {
+  const rooms = world.underground.rooms.filter((room) => room.type === "egg");
+  const capacity = rooms.reduce((total, room) => total + room.capacity, 0);
+  const used = world.underground.brood.filter((brood) => brood.location === "egg").length;
+  return capacity > used;
+}
+
+function roomCenter(room: UndergroundRoom): { x: number; y: number } {
+  return { x: room.x + room.width / 2, y: room.y + room.height / 2 };
+}
+
+function nearestChamberPos(world: World, room: UndergroundRoom): { x: number; y: number } | null {
+  let best: { x: number; y: number } | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  const target = roomCenter(room);
+  for (let y = 0; y < world.underground.grid.length; y += 1) {
+    for (let x = 0; x < world.underground.grid[y].length; x += 1) {
+      const tile = world.underground.grid[y][x];
+      if (tile.type !== "chamber" || tile.roomId !== room.id) {
+        continue;
+      }
+      const dist = Math.hypot(x + 0.5 - target.x, y + 0.5 - target.y);
+      if (dist < bestDistance) {
+        best = { x: x + 0.5, y: y + 0.5 };
+        bestDistance = dist;
+      }
+    }
+  }
+  return best;
+}
+
+function nurseryDropPos(world: World): { x: number; y: number } | null {
+  const rooms = world.underground.rooms
+    .filter((room) => room.type === "nursery" && room.used < room.capacity)
+    .sort((a, b) => Math.hypot(roomCenter(a).x - world.underground.queenChamber.x, roomCenter(a).y - world.underground.queenChamber.y) -
+      Math.hypot(roomCenter(b).x - world.underground.queenChamber.x, roomCenter(b).y - world.underground.queenChamber.y));
+
+  for (const room of rooms) {
+    const pos = nearestChamberPos(world, room);
+    if (pos) {
+      return pos;
+    }
+  }
+  return null;
+}
+
+function centerSettledBrood(world: World): void {
+  const centerByRoom = new Map<string, { x: number; y: number }>();
+  for (const room of world.underground.rooms) {
+    if (room.type !== "egg" && room.type !== "nursery") {
+      continue;
+    }
+    const pos = nearestChamberPos(world, room);
+    if (pos) {
+      centerByRoom.set(room.id, pos);
+    }
+  }
+
+  for (const type of ["egg", "nursery"] as const) {
+    const rooms = world.underground.rooms
+      .filter((room) => room.type === type && room.capacity > 0 && centerByRoom.has(room.id))
+      .sort((a, b) => a.id.localeCompare(b.id));
+    if (rooms.length === 0) {
+      continue;
+    }
+
+    let roomIndex = 0;
+    let roomUsed = 0;
+    const broodItems = world.underground.brood.filter((brood) => !brood.carriedBy && brood.location === type);
+    for (const brood of broodItems) {
+      while (roomIndex < rooms.length - 1 && roomUsed >= rooms[roomIndex].capacity) {
+        roomIndex += 1;
+        roomUsed = 0;
+      }
+      const pos = centerByRoom.get(rooms[roomIndex].id);
+      if (pos) {
+        brood.pos = { ...pos };
+      }
+      roomUsed += 1;
+    }
+  }
+}
+
 export function updateBrood(world: World): void {
   const matureBroodIds = new Set<string>();
+  centerSettledBrood(world);
 
   for (const brood of world.underground.brood) {
     if (brood.carriedBy) {
@@ -73,12 +158,13 @@ export function updateBrood(world: World): void {
       continue;
     }
 
-    if (brood.stage === "egg" && brood.location === "nursery") {
+    if (brood.stage === "egg" && brood.location === "egg") {
       brood.progress += 1;
-      if (brood.progress >= CONFIG.eggIncubationTicks) {
+      const nurseryPos = nurseryDropPos(world);
+      if (brood.progress >= CONFIG.eggIncubationTicks && nurseryHasFreeCapacity(world) && nurseryPos) {
         brood.stage = "larva";
         brood.location = "nursery";
-        brood.pos = { ...world.underground.nursery };
+        brood.pos = nurseryPos;
         brood.progress = 0;
       }
       continue;
@@ -142,8 +228,8 @@ export function updateQueen(world: World): void {
       !brood.isPrincess &&
       Math.hypot(brood.pos.x - underground.queenChamber.x, brood.pos.y - underground.queenChamber.y) <= CONFIG.undergroundNodeRadius * 2
   );
-  const nurseryHasAnyChamber = nurseryChamberCapacity(world) > 0;
-  const crowdedEggs = nurseryHasAnyChamber ? Math.max(0, eggsNearQueen.length - CONFIG.queenEggComfortLimit) : 0;
+  const eggRoomHasAnyChamber = chamberCapacity(world, "room-egg") > 0;
+  const crowdedEggs = eggRoomHasAnyChamber ? Math.max(0, eggsNearQueen.length - CONFIG.queenEggComfortLimit) : 0;
   underground.queen.stress = clamp(
     underground.queen.stress + (crowdedEggs > 0 ? CONFIG.queenStressPerTick * crowdedEggs : -CONFIG.queenStressReliefPerTick),
     0,
@@ -182,7 +268,7 @@ export function updateQueen(world: World): void {
   underground.queen.layCooldown -= 1;
   const totalPopulation = world.ants.length + underground.brood.length;
   const queenHasEggSpace =
-    eggsNearQueen.length < CONFIG.queenEggComfortLimit || nurseryHasFreeCapacity(world);
+    eggsNearQueen.length < CONFIG.queenEggComfortLimit || eggRoomHasFreeCapacity(world);
   if (
     underground.queen.layCooldown <= 0 &&
     queenHasEggSpace &&
