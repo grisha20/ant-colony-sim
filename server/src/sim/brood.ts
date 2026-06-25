@@ -32,9 +32,16 @@ function nurseryChamberCapacity(world: World): number {
   return world.underground.grid.reduce(
     (total, row) =>
       total +
-      row.filter((tile) => tile.type === "chamber" && tile.roomId === "room-nursery").length,
+      row.filter((tile) => tile.type === "chamber" && tile.roomId?.startsWith("room-nursery")).length,
     0
   );
+}
+
+function nurseryHasFreeCapacity(world: World): boolean {
+  const rooms = world.underground.rooms.filter((room) => room.type === "nursery");
+  const capacity = rooms.reduce((total, room) => total + room.capacity, 0);
+  const used = world.underground.brood.filter((brood) => brood.location === "nursery").length;
+  return capacity > used;
 }
 
 export function updateBrood(world: World): void {
@@ -175,7 +182,7 @@ export function updateQueen(world: World): void {
   underground.queen.layCooldown -= 1;
   const totalPopulation = world.ants.length + underground.brood.length;
   const queenHasEggSpace =
-    eggsNearQueen.length < CONFIG.queenEggComfortLimit || underground.rooms.some((room) => room.type === "nursery");
+    eggsNearQueen.length < CONFIG.queenEggComfortLimit || nurseryHasFreeCapacity(world);
   if (
     underground.queen.layCooldown <= 0 &&
     queenHasEggSpace &&

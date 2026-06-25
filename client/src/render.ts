@@ -768,24 +768,32 @@ function updateUndergroundBrood(pool: SpritePool, world: WorldSnapshot): void {
 function updateUndergroundStorage(pool: SpritePool, world: WorldSnapshot): void {
   beginPool(pool);
 
-  if (!hasUndergroundRoom(world, "storage") || !isDugUndergroundPos(world, world.underground.storage)) {
+  const storageRooms = world.underground.rooms.filter((room) => room.type === "storage" && room.used > 0);
+  if (storageRooms.length === 0) {
     endPool(pool);
     return;
   }
 
-  const storage = undergroundToScreen(world, world.underground.storage);
-  const count = Math.max(0, Math.min(28, Math.ceil(world.underground.foodStorage / 2)));
-  for (let index = 0; index < count; index += 1) {
-    const sprite = acquireSprite(pool);
-    const column = index % 7;
-    const row = Math.floor(index / 7);
-    sprite.scale.set(2.7);
-    placeSprite(
-      sprite,
-      storage.x - 42 + column * 14 + ((row % 2) * 4),
-      storage.y + 22 - row * 11,
-      (index % 3) * 0.12
-    );
+  for (const room of storageRooms) {
+    const center = undergroundToScreen(world, {
+      x: room.x + room.width / 2,
+      y: room.y + room.height / 2
+    });
+    const count = Math.max(3, Math.min(18, Math.ceil(room.used / 7)));
+    for (let index = 0; index < count; index += 1) {
+      const sprite = acquireSprite(pool);
+      const angle = index * 2.399963229728653;
+      const ring = Math.floor(index / 5);
+      const radiusX = 3 + ring * 7 + (index % 3) * 1.5;
+      const radiusY = 2 + ring * 4;
+      sprite.scale.set(2.9 + (index % 4) * 0.16);
+      placeSprite(
+        sprite,
+        center.x + Math.cos(angle) * radiusX,
+        center.y + 14 + Math.sin(angle) * radiusY,
+        (index % 5) * 0.08
+      );
+    }
   }
 
   endPool(pool);

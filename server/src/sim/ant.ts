@@ -286,8 +286,10 @@ function nurseryRoom(world: World) {
 }
 
 function nurseryHasSpace(world: World): boolean {
-  const room = nurseryRoom(world);
-  return !!room && room.used < room.capacity;
+  const rooms = world.underground.rooms.filter((room) => room.type === "nursery");
+  const capacity = rooms.reduce((total, room) => total + room.capacity, 0);
+  const used = world.underground.brood.filter((brood) => brood.location === "nursery").length;
+  return capacity > used;
 }
 
 function nurseryDropPos(world: World): Vec2 | null {
@@ -296,7 +298,7 @@ function nurseryDropPos(world: World): Vec2 | null {
     const row = world.underground.grid[y];
     for (let x = 0; x < row.length; x += 1) {
       const tile = row[x];
-      if (tile.type === "chamber" && tile.roomId === "room-nursery") {
+      if (tile.type === "chamber" && tile.roomId?.startsWith("room-nursery")) {
         tiles.push({ x, y });
       }
     }
