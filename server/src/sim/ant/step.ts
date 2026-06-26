@@ -118,7 +118,7 @@ function isSurfaceExitThreatened(world: World): boolean {
 }
 
 function shouldWaitForExitSlot(world: World, ant: Ant): boolean {
-  const maxConcurrentExits = 4;
+  const maxConcurrentExits = Math.max(4, Math.min(16, Math.ceil(world.directives.activeTarget / 4)));
   const exiting = world.ants
     .filter((other) => other.layer === "underground" && other.state === "toEntrance")
     .sort((a, b) => numericAntId(a.id) - numericAntId(b.id));

@@ -100,7 +100,7 @@ export const CONFIG = {
   warHungerThreshold: 10,
   comfortableStorage: 120,
   minForagers: 6,
-  maxForagers: 16,
+  maxForagers: 64,
   spiderNearNestPenalty: 0.55,
   spiderNearNestRadius: 18,
 

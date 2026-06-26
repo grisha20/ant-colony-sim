@@ -1,5 +1,20 @@
 {
   "current": {
+    "id": "genome-mqv244qf-uozs5d",
+    "generation": 2,
+    "genes": {
+      "nurseFraction": 0.5992899079463518,
+      "digFraction": 0.17225689629273855,
+      "queenRearBias": 0.6850622693517472,
+      "forageSpread": 0.30671094046044073,
+      "spiderAttackStorage": 0,
+      "layReserve": 21.639445907877487,
+      "refuelThreshold": 430.80365201006003,
+      "spiderAvoid": 6.8822114846342375,
+      "aggression": 0.19992498896155786
+    }
+  },
+  "best": {
     "id": "genome-mqv1c9kb-r9wpar",
     "generation": 1,
     "genes": {
@@ -14,8 +29,26 @@
       "aggression": 0.288815538274973
     }
   },
-  "best": null,
-  "bestFitness": 0,
-  "archive": [],
-  "generationsRun": 0
+  "bestFitness": 5627.1706469717765,
+  "archive": [
+    {
+      "genome": {
+        "id": "genome-mqv1c9kb-r9wpar",
+        "generation": 1,
+        "genes": {
+          "nurseFraction": 0.529551569152286,
+          "digFraction": 0.17648855429796612,
+          "queenRearBias": 0.6136135413255788,
+          "forageSpread": 0.3501099585145772,
+          "spiderAttackStorage": 2.8451331062609024,
+          "layReserve": 21.96856647314849,
+          "refuelThreshold": 437.4114687003318,
+          "spiderAvoid": 7.302063074823392,
+          "aggression": 0.288815538274973
+        }
+      },
+      "fitness": 5627.1706469717765
+    }
+  ],
+  "generationsRun": 1
 }
