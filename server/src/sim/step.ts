@@ -48,7 +48,7 @@ function scentFoodSources(world: World): void {
       const len = offsets.length;
       for (let i = 0; i < len; i += 1) {
         const offset = offsets[i];
-        world.pheromones.food.add(sx + offset.dx, sy + offset.dy, CONFIG.foodSourceScent * offset.falloff);
+        world.pheromones.food.add(sx + offset.dx, sy + offset.dy, CONFIG.foodSourceScent * offset.falloff * 5);
       }
     }
   }
@@ -131,7 +131,9 @@ export function step(world: World): void {
 
   respawnCarrion(world);
   growFoodSources(world);
-  scentFoodSources(world);
+  if (world.tick % 5 === 0) {
+    scentFoodSources(world);
+  }
 
   for (const colony of world.colonies) {
     const scopedWorld = colonyWorldView(world, colony);

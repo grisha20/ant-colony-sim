@@ -65,15 +65,24 @@ function surfaceMoveSpeed(world: World, ant: Ant): number {
 
 function moveSurfaceToward(world: World, ant: Ant, target: Vec2, avoidSpiders: boolean, allowSeparation = true): void {
   const speed = surfaceMoveSpeed(world, ant);
-  let direction = normalize({ x: target.x - ant.pos.x, y: target.y - ant.pos.y });
+  let desired = normalize({ x: target.x - ant.pos.x, y: target.y - ant.pos.y });
 
   if (avoidSpiders) {
-    direction = applySpiderAvoidance(world, ant.pos, direction, speed);
+    desired = applySpiderAvoidance(world, ant.pos, desired, speed);
   }
 
   if (allowSeparation) {
-    direction = applySeparation(world, ant, direction);
+    desired = applySeparation(world, ant, desired);
   }
+
+  const dist = distance(ant.pos, target);
+  // Базовая маневренность k = 0.18. Чем ближе к цели (до 4 единиц), тем точнее маневрируем (до 1.0)
+  const k = dist < 4.0 ? 0.18 + (1.0 - 0.18) * (1.0 - dist / 4.0) : 0.18;
+
+  const direction = normalize({
+    x: ant.heading.x * (1 - k) + desired.x * k,
+    y: ant.heading.y * (1 - k) + desired.y * k
+  });
 
   ant.heading = direction;
   ant.pos.x += direction.x * speed;
@@ -91,9 +100,11 @@ function clampToSurface(ant: Ant, world: World): void {
 
   if (ant.pos.x !== oldX) {
     ant.heading.x = -ant.heading.x;
+    ant.pos.x += ant.heading.x * 0.1;
   }
   if (ant.pos.y !== oldY) {
     ant.heading.y = -ant.heading.y;
+    ant.pos.y += ant.heading.y * 0.1;
   }
 }
 
@@ -559,9 +570,18 @@ function retreatFromSpiderToEntrance(world: World, ant: Ant, spiderPos: Vec2): v
   const speed = surfaceMoveSpeed(world, ant);
   const away = normalize({ x: ant.pos.x - spiderPos.x, y: ant.pos.y - spiderPos.y });
   const home = normalize({ x: world.surface.entrance.x - ant.pos.x, y: world.surface.entrance.y - ant.pos.y });
-  let direction = normalize({ x: away.x * 1.4 + home.x, y: away.y * 1.4 + home.y });
+  let desired = normalize({ x: away.x * 1.4 + home.x, y: away.y * 1.4 + home.y });
 
-  direction = applySeparation(world, ant, direction);
+  desired = applySeparation(world, ant, desired);
+
+  const dist = distance(ant.pos, world.surface.entrance);
+  // Базовая маневренность k = 0.18. Чем ближе к цели (до 4 единиц), тем точнее маневрируем (до 1.0)
+  const k = dist < 4.0 ? 0.18 + (1.0 - 0.18) * (1.0 - dist / 4.0) : 0.18;
+
+  const direction = normalize({
+    x: ant.heading.x * (1 - k) + desired.x * k,
+    y: ant.heading.y * (1 - k) + desired.y * k
+  });
 
   ant.state = "search";
   ant.heading = direction;
@@ -1048,23 +1068,34 @@ function moveSearching(world: World, ant: Ant): void {
     : world.directives.forageWander * (1.0 + Math.min(3.0, density / 4.0));
   const scout = foodAvailable ? null : scoutDirection(world, ant);
 
-  const direction = normalize({
+  // Вычисляем желаемое направление на основе внешних сил
+  const desired = normalize({
     x:
-      ant.heading.x * 0.35 +
       gradient.x * gradientPower +
       (directFood?.x ?? 0) * 1.4 +
       (scout?.x ?? 0) * 1.35 +
       jitter.x * wanderWeight,
     y:
-      ant.heading.y * 0.35 +
       gradient.y * gradientPower +
       (directFood?.y ?? 0) * 1.4 +
       (scout?.y ?? 0) * 1.35 +
       jitter.y * wanderWeight
   });
-  const safeDirection = isColonyStarving(world) ? direction : applySpiderAvoidance(world, ant.pos, direction, speed);
 
-  const finalDirection = applySeparation(world, ant, safeDirection);
+  const safeDesired = isColonyStarving(world) ? desired : applySpiderAvoidance(world, ant.pos, desired, speed);
+  const finalDesired = applySeparation(world, ant, safeDesired);
+
+  // Плавная интерполяция к желаемому вектору
+  let k = 0.18;
+  if (directFood && nearestFoodDistance < 4.0) {
+    k = 0.18 + (1.0 - 0.18) * (1.0 - nearestFoodDistance / 4.0);
+  }
+
+  const finalDirection = normalize({
+    x: ant.heading.x * (1 - k) + finalDesired.x * k,
+    y: ant.heading.y * (1 - k) + finalDesired.y * k
+  });
+
   ant.heading = finalDirection;
   ant.pos.x += finalDirection.x * speed;
   ant.pos.y += finalDirection.y * speed;
@@ -1344,8 +1375,9 @@ export function tryCrossLayer(world: World, ant: Ant): boolean {
     ant.state = "search";
     ant.pos = { ...world.surface.entrance };
     ant.heading = fanDirection(randomHeading(), ant.id);
-    ant.pos.x += ant.heading.x * CONFIG.workerSurfaceSpeed;
-    ant.pos.y += ant.heading.y * CONFIG.workerSurfaceSpeed;
+    const spawnOffset = CONFIG.entranceRadiusSurface + 0.8;
+    ant.pos.x += ant.heading.x * spawnOffset;
+    ant.pos.y += ant.heading.y * spawnOffset;
     clampToSurface(ant, world);
     return true;
   }
