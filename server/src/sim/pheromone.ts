@@ -1,3 +1,5 @@
+import type { SparseGrid } from "../../../shared/types";
+
 export class PheromoneGrid {
   readonly width: number;
   readonly height: number;
@@ -70,21 +72,97 @@ export class PheromoneGrid {
   }
 
   evaporateAndDiffuse(evaporation: number, diffusion: number): void {
-    for (let y = 0; y < this.height; y += 1) {
-      for (let x = 0; x < this.width; x += 1) {
-        const index = y * this.width + x;
-        const center = this.values[index] * evaporation;
-        const left = x > 0 ? this.values[index - 1] : center;
-        const right = x < this.width - 1 ? this.values[index + 1] : center;
-        const up = y > 0 ? this.values[index - this.width] : center;
-        const down = y < this.height - 1 ? this.values[index + this.width] : center;
+    const w = this.width;
+    const h = this.height;
+    const vals = this.values;
+    const scr = this.scratch;
+
+    // 1. Быстрый проход по внутренним ячейкам (без проверок границ)
+    for (let y = 1; y < h - 1; y += 1) {
+      const rowOffset = y * w;
+      for (let x = 1; x < w - 1; x += 1) {
+        const index = rowOffset + x;
+        const center = vals[index] * evaporation;
+        const left = vals[index - 1];
+        const right = vals[index + 1];
+        const up = vals[index - w];
+        const down = vals[index + w];
         const neighborAverage = (left + right + up + down) * 0.25;
 
-        this.scratch[index] = center * (1 - diffusion) + neighborAverage * diffusion;
+        scr[index] = center * (1 - diffusion) + neighborAverage * diffusion;
       }
     }
 
-    this.values.set(this.scratch);
+    // 2. Обработка границ с проверками
+    // Верхняя граница (y = 0)
+    for (let x = 0; x < w; x += 1) {
+      const index = x;
+      const center = vals[index] * evaporation;
+      const left = x > 0 ? vals[index - 1] : center;
+      const right = x < w - 1 ? vals[index + 1] : center;
+      const up = center;
+      const down = h > 1 ? vals[index + w] : center;
+      const neighborAverage = (left + right + up + down) * 0.25;
+      scr[index] = center * (1 - diffusion) + neighborAverage * diffusion;
+    }
+
+    // Нижняя граница (y = h - 1)
+    if (h > 1) {
+      const rowOffset = (h - 1) * w;
+      for (let x = 0; x < w; x += 1) {
+        const index = rowOffset + x;
+        const center = vals[index] * evaporation;
+        const left = x > 0 ? vals[index - 1] : center;
+        const right = x < w - 1 ? vals[index + 1] : center;
+        const up = vals[index - w];
+        const down = center;
+        const neighborAverage = (left + right + up + down) * 0.25;
+        scr[index] = center * (1 - diffusion) + neighborAverage * diffusion;
+      }
+    }
+
+    // Левая граница (x = 0, y = 1..h-2)
+    for (let y = 1; y < h - 1; y += 1) {
+      const index = y * w;
+      const center = vals[index] * evaporation;
+      const left = center;
+      const right = w > 1 ? vals[index + 1] : center;
+      const up = vals[index - w];
+      const down = vals[index + w];
+      const neighborAverage = (left + right + up + down) * 0.25;
+      scr[index] = center * (1 - diffusion) + neighborAverage * diffusion;
+    }
+
+    // Правая граница (x = w - 1, y = 1..h-2)
+    if (w > 1) {
+      for (let y = 1; y < h - 1; y += 1) {
+        const index = y * w + (w - 1);
+        const center = vals[index] * evaporation;
+        const left = vals[index - 1];
+        const right = center;
+        const up = vals[index - w];
+        const down = vals[index + w];
+        const neighborAverage = (left + right + up + down) * 0.25;
+        scr[index] = center * (1 - diffusion) + neighborAverage * diffusion;
+      }
+    }
+
+    vals.set(scr);
+  }
+
+  toSparse(): SparseGrid {
+    const indices: number[] = [];
+    const values: number[] = [];
+    const vals = this.values;
+    const len = vals.length;
+    for (let i = 0; i < len; i += 1) {
+      const val = vals[i];
+      if (val > 0.01) {
+        indices.push(i);
+        values.push(Math.round(val * 100) / 100);
+      }
+    }
+    return { i: indices, v: values };
   }
 
   toArray(): number[] {

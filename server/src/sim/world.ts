@@ -515,14 +515,14 @@ export function toSnapshot(world: World, includePheromones = true): WorldSnapsho
     ? {
         width: world.pheromones.width,
         height: world.pheromones.height,
-        food: world.pheromones.food.toArray(),
-        home: world.pheromones.home.toArray()
+        food: world.pheromones.food.toSparse(),
+        home: world.pheromones.home.toSparse()
       }
     : {
         width: world.pheromones.width,
         height: world.pheromones.height,
-        food: [],
-        home: []
+        food: { i: [], v: [] },
+        home: { i: [], v: [] }
       };
 
   return {

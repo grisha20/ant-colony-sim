@@ -172,11 +172,16 @@ export type Surface = {
   carrion: FoodSource[];
 };
 
+export type SparseGrid = {
+  i: number[];
+  v: number[];
+};
+
 export type PheromoneSnapshot = {
   width: number;
   height: number;
-  food: number[];
-  home: number[];
+  food: any;
+  home: any;
 };
 
 export type WorldSnapshot = {

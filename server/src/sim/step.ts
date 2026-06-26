@@ -17,18 +17,37 @@ import {
   type World
 } from "./world";
 
+let scentOffsets: { dx: number; dy: number; falloff: number }[] | null = null;
+
+function getScentOffsets(radius: number): { dx: number; dy: number; falloff: number }[] {
+  if (scentOffsets) {
+    return scentOffsets;
+  }
+  scentOffsets = [];
+  for (let dy = -radius; dy <= radius; dy += 1) {
+    for (let dx = -radius; dx <= radius; dx += 1) {
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      if (distance <= radius) {
+        const falloff = 1 - distance / radius;
+        scentOffsets.push({ dx, dy, falloff });
+      }
+    }
+  }
+  return scentOffsets;
+}
+
 function scentFoodSources(world: World): void {
+  const radius = CONFIG.foodSourceScentRadius;
+  const offsets = getScentOffsets(radius);
+
   for (const source of [...world.surface.foodSources, ...world.surface.carrion]) {
     if (source.amount > 0) {
-      const radius = CONFIG.foodSourceScentRadius;
-      for (let y = Math.floor(source.pos.y - radius); y <= Math.ceil(source.pos.y + radius); y += 1) {
-        for (let x = Math.floor(source.pos.x - radius); x <= Math.ceil(source.pos.x + radius); x += 1) {
-          const distance = Math.hypot(source.pos.x - x, source.pos.y - y);
-          if (distance <= radius) {
-            const falloff = 1 - distance / radius;
-            world.pheromones.food.add(x, y, CONFIG.foodSourceScent * falloff);
-          }
-        }
+      const sx = Math.floor(source.pos.x);
+      const sy = Math.floor(source.pos.y);
+      const len = offsets.length;
+      for (let i = 0; i < len; i += 1) {
+        const offset = offsets[i];
+        world.pheromones.food.add(sx + offset.dx, sy + offset.dy, CONFIG.foodSourceScent * offset.falloff);
       }
     }
   }

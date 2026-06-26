@@ -666,13 +666,34 @@ socket.addEventListener("error", () => {
   statusNode.textContent = "Ошибка WebSocket";
 });
 
+function unpackSparseGrid(sparse: any, size: number): Float32Array {
+  const arr = new Float32Array(size);
+  if (sparse && sparse.i && sparse.v) {
+    const indices = sparse.i;
+    const values = sparse.v;
+    const len = indices.length;
+    for (let k = 0; k < len; k += 1) {
+      arr[indices[k]] = values[k];
+    }
+  }
+  return arr;
+}
+
 socket.addEventListener("message", (event) => {
   const snap = JSON.parse(String(event.data)) as WorldSnapshot;
 
-  if (snap.pheromones && snap.pheromones.food.length > 0) {
+  const hasNewPheromones = snap.pheromones && snap.pheromones.food && snap.pheromones.food.i && snap.pheromones.food.i.length > 0;
+  if (hasNewPheromones) {
+    const size = snap.pheromones.width * snap.pheromones.height;
+    snap.pheromones.food = unpackSparseGrid(snap.pheromones.food, size);
+    snap.pheromones.home = unpackSparseGrid(snap.pheromones.home, size);
     lastPheromones = snap.pheromones;
   } else if (lastPheromones) {
     snap.pheromones = lastPheromones;
+  } else if (snap.pheromones) {
+    const size = snap.pheromones.width * snap.pheromones.height;
+    snap.pheromones.food = new Float32Array(size);
+    snap.pheromones.home = new Float32Array(size);
   }
 
   const seen = new Set<string>();
