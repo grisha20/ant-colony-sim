@@ -1,4 +1,4 @@
-import { Container } from "pixi.js";
+import { Container, Renderer } from "pixi.js";
 import type { Vec2, WorldSnapshot } from "../../../shared/types";
 import type { Camera, RendererState, ViewMode } from "./types";
 import { SURFACE_TILE_SIZE } from "./types";
@@ -39,6 +39,7 @@ function undergroundWorld(world: WorldSnapshot, colonyIndex: number): WorldSnaps
 
 export function renderWorld(
   stage: Container,
+  renderer: Renderer,
   world: WorldSnapshot,
   mode: ViewMode,
   viewportWidth = 900,
@@ -52,7 +53,7 @@ export function renderWorld(
   rendererState.underground.root.visible = mode === "underground";
 
   if (mode === "surface") {
-    renderSurface(rendererState.surface, world, viewportWidth, viewportHeight, camera);
+    renderSurface(rendererState.surface, renderer, world, viewportWidth, viewportHeight, camera);
     return;
   }
 

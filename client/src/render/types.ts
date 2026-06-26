@@ -38,6 +38,7 @@ export type SurfaceScene = {
   enemyPool: SpritePool;
   antPool: SpritePool;
   staticKey: string;
+  groundSprite?: Sprite;
 };
 
 export type UndergroundScene = {

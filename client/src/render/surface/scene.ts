@@ -1,4 +1,4 @@
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, RenderTexture, Sprite, Renderer } from "pixi.js";
 import type { Vec2, WorldSnapshot } from "../../../../shared/types";
 import { createSpritePool } from "../spritePool";
 import type { Camera, SurfaceScene, ViewBounds } from "../types";
@@ -62,15 +62,52 @@ export function createSurfaceScene(): SurfaceScene {
   };
 }
 
-function rebuildSurfaceStatic(scene: SurfaceScene, world: WorldSnapshot, cell: number, bounds: ViewBounds, staticKey: string): void {
+function rebuildSurfaceStatic(
+  scene: SurfaceScene,
+  renderer: Renderer,
+  world: WorldSnapshot,
+  cell: number,
+  staticKey: string
+): void {
   scene.staticLayer.removeChildren();
-  drawSurfaceGround(scene.staticLayer, world.surface.width, world.surface.height, cell, bounds);
-  drawSurfaceEntrance(scene.staticLayer, world, cell);
+  if (scene.groundSprite) {
+    scene.groundSprite.destroy({ children: true, texture: true });
+    scene.groundSprite = undefined;
+  }
+
+  const tempContainer = new Container();
+  const fullBounds: ViewBounds = {
+    left: 0,
+    right: world.surface.width,
+    top: 0,
+    bottom: world.surface.height
+  };
+  drawSurfaceGround(tempContainer, world.surface.width, world.surface.height, cell, fullBounds);
+  drawSurfaceEntrance(tempContainer, world, cell);
+
+  const widthPx = world.surface.width * cell;
+  const heightPx = world.surface.height * cell;
+  const renderTexture = RenderTexture.create({
+    width: widthPx,
+    height: heightPx
+  });
+
+  renderer.render({
+    container: tempContainer,
+    target: renderTexture
+  });
+
+  const groundSprite = new Sprite(renderTexture);
+  scene.staticLayer.addChild(groundSprite);
+  scene.groundSprite = groundSprite;
+
+  tempContainer.destroy({ children: true });
   scene.staticKey = staticKey;
 }
 
 export function renderSurface(
   scene: SurfaceScene,
+  renderer: Renderer,
   world: WorldSnapshot,
   viewportWidth: number,
   viewportHeight: number,
@@ -85,14 +122,10 @@ export function renderSurface(
   const staticKey = [
     world.surface.width,
     world.surface.height,
-    ...(world.surface.entrances ?? [world.surface.entrance]).flatMap((entrance) => [entrance.x, entrance.y]),
-    Math.floor(bounds.left),
-    Math.ceil(bounds.right),
-    Math.floor(bounds.top),
-    Math.ceil(bounds.bottom)
+    ...(world.surface.entrances ?? [world.surface.entrance]).flatMap((entrance) => [entrance.x, entrance.y])
   ].join(":");
   if (scene.staticKey !== staticKey) {
-    rebuildSurfaceStatic(scene, world, cell, bounds, staticKey);
+    rebuildSurfaceStatic(scene, renderer, world, cell, staticKey);
   }
 
   drawSurfacePheromones(scene.pheromones, world, cell, bounds);

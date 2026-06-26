@@ -504,6 +504,7 @@ function draw(interpT: number): void {
 
   renderWorld(
     pixi.stage,
+    pixi.renderer,
     { ...latestWorld, ants },
     currentView,
     pixi.screen.width,
