@@ -1,4 +1,4 @@
-import type { Ant, Vec2 } from "../../../../shared/types";
+import type { Ant, Debris, Vec2 } from "../../../../shared/types";
 import { CONFIG } from "../../config";
 import { tickCache } from "../cache";
 import { addFoodSource } from "../world";
@@ -126,6 +126,15 @@ export function dropCarriedFood(world: World, ant: Ant): void {
     addFoodSource(world, ant.pos.x, ant.pos.y, ant.carrying);
     ant.carrying = 0;
   }
+  if (ant.carryingDebris) {
+    const nextDebrisId = Math.random().toString(36).substr(2, 9);
+    world.surface.debris.push({
+      id: `debris-${nextDebrisId}`,
+      type: ant.carryingDebris,
+      pos: { ...ant.pos }
+    });
+    ant.carryingDebris = null;
+  }
 }
 
 export function handleEnemyColonyCombat(world: World, ant: Ant): boolean {
@@ -207,6 +216,21 @@ export function moveFighting(world: World, ant: Ant): boolean {
   const starving = isColonyStarving(world);
   const nearest = nearestSpider(world, ant.pos);
   if (nearest.index < 0) {
+    if (ant.state === "fight") {
+      ant.state = "search";
+    }
+    return false;
+  }
+
+  const liveAntsCount = world.ants.filter((a) => a.state !== "dead").length;
+  const isStartPeriod = liveAntsCount <= 10;
+
+  if (isStartPeriod) {
+    const alertNearSpider = ant.carrying <= 0 && nearest.distance <= CONFIG.antAlertRange;
+    if (alertNearSpider) {
+      retreatFromSpiderToEntrance(world, ant, world.enemies[nearest.index].pos);
+      return true;
+    }
     if (ant.state === "fight") {
       ant.state = "search";
     }

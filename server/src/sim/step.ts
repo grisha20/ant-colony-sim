@@ -13,6 +13,7 @@ import {
   createColonyRuntime,
   growFoodSources,
   respawnCarrion,
+  respawnDebris,
   syncColonyStatsForRuntime,
   syncWorldLegacyFields,
   type ColonyRuntime,
@@ -132,6 +133,7 @@ export function step(world: World): void {
 
   respawnCarrion(world);
   growFoodSources(world);
+  respawnDebris(world);
   if (world.tick % 5 === 0) {
     scentFoodSources(world);
   }

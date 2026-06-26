@@ -6,6 +6,7 @@ import { isInBounds } from "./scene";
 import {
   getAntTexture
 } from "../../sprites";
+import { drawPebble, drawLeaf } from "./ground";
 
 export function updateSurfaceFood(pool: SpritePool, world: WorldSnapshot, cell: number, bounds: ViewBounds): void {
   beginPool(pool);
@@ -141,7 +142,13 @@ export function updateSurfaceEnemies(
   endPool(carriedCarrionPool);
 }
 
-export function updateSurfaceAnts(pool: SpritePool, world: WorldSnapshot, cell: number, bounds: ViewBounds): void {
+export function updateSurfaceAnts(
+  pool: SpritePool,
+  debrisGraphics: Graphics,
+  world: WorldSnapshot,
+  cell: number,
+  bounds: ViewBounds
+): void {
   beginPool(pool);
 
   for (const ant of world.ants) {
@@ -152,14 +159,60 @@ export function updateSurfaceAnts(pool: SpritePool, world: WorldSnapshot, cell: 
       continue;
     }
 
-    const carrying = ant.state === "carry" || ant.carrying > 0;
+    const carrying = ant.state === "carry" || ant.carrying > 0 || !!ant.carryingDebris;
     const color = ant.colonyId === "colony-2" ? "red" : "dark";
     const sprite = acquireSprite(pool);
     sprite.texture = getAntTexture(carrying, color);
     sprite.scale.set(ant.state === "carry" ? 2.8 : 2.45);
     sprite.tint = 0xffffff;
-    placeSprite(sprite, ant.pos.x * cell, ant.pos.y * cell, antRotation(ant));
+    const rot = antRotation(ant);
+    placeSprite(sprite, ant.pos.x * cell, ant.pos.y * cell, rot);
+
+    if (ant.carryingDebris) {
+      const hX = Math.cos(rot);
+      const hY = Math.sin(rot);
+      const offsetDist = cell * 0.7;
+      const debrisX = ant.pos.x * cell + hX * offsetDist;
+      const debrisY = ant.pos.y * cell + hY * offsetDist;
+
+      if (ant.carryingDebris === "pebble") {
+        drawPebble(debrisGraphics, debrisX, debrisY, cell * 0.45, 0xb4b0a6);
+      } else {
+        drawLeaf(debrisGraphics, debrisX, debrisY, cell * 0.22, rot + Math.PI / 2);
+      }
+    }
   }
 
   endPool(pool);
+}
+
+export function updateSurfaceDebris(graphics: Graphics, world: WorldSnapshot, cell: number, bounds: ViewBounds): void {
+  graphics.clear();
+
+  if (!world.surface.debris) {
+    return;
+  }
+
+  for (const item of world.surface.debris) {
+    if (!isInBounds(item.pos, bounds, 3)) {
+      continue;
+    }
+
+    const x = item.pos.x * cell;
+    const y = item.pos.y * cell;
+
+    if (item.type === "pebble") {
+      const sizeSeed = Math.sin(item.pos.x * 12.9898 + item.pos.y * 78.233) * 43758.5453;
+      const sizeRoll = sizeSeed - Math.floor(sizeSeed);
+      const size = cell * (0.6 + sizeRoll * 0.5);
+      const shade = sizeRoll > 0.45 ? 0x9c9a91 : 0xb8b5aa;
+      drawPebble(graphics, x, y, size, shade);
+    } else {
+      const rotSeed = Math.sin(item.pos.x * 31.7 + item.pos.y * 127.1) * 43758.5453;
+      const rotRoll = rotSeed - Math.floor(rotSeed);
+      const rotation = rotRoll * Math.PI * 2;
+      const scale = cell * (0.3 + rotRoll * 0.2);
+      drawLeaf(graphics, x, y, scale, rotation);
+    }
+  }
 }

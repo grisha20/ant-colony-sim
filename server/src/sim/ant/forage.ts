@@ -1,4 +1,4 @@
-import type { Ant, Vec2 } from "../../../../shared/types";
+import type { Ant, Debris, Vec2 } from "../../../../shared/types";
 import { CONFIG } from "../../config";
 import type { World } from "../world";
 import { randomHeading } from "../world";
@@ -241,5 +241,94 @@ export function collectUndergroundCarrion(world: World, ant: Ant): boolean {
   source.amount = Math.max(0, source.amount - amount);
   ant.carrying = amount;
   ant.state = "deposit";
+  return true;
+}
+
+export function moveCarryingDebris(world: World, ant: Ant): void {
+  ant.job = "idle";
+  const colony = world.colonies.find(c => c.id === ant.colonyId);
+  const entrance = colony?.surfaceEntrance ?? world.surface.entrance;
+  const dirtMound = colony?.underground?.dirtMound ?? 0;
+  const scale = 1.0 + Math.min(1.8, dirtMound / 400);
+  const minDrop = 3.0 * scale;
+  const maxDrop = 7.0 * scale;
+
+  const distToEntrance = distance(ant.pos, entrance);
+  if (distToEntrance <= maxDrop) {
+    const angle = Math.random() * Math.PI * 2;
+    const r = minDrop + Math.random() * (maxDrop - minDrop);
+    const dropPos = {
+      x: entrance.x + Math.cos(angle) * r,
+      y: entrance.y + Math.sin(angle) * r
+    };
+    dropPos.x = Math.max(1.5, Math.min(world.surface.width - 1.5, dropPos.x));
+    dropPos.y = Math.max(1.5, Math.min(world.surface.height - 1.5, dropPos.y));
+
+    const nextDebrisId = Math.random().toString(36).substr(2, 9);
+    world.surface.debris.push({
+      id: `debris-${nextDebrisId}`,
+      type: ant.carryingDebris!,
+      pos: dropPos
+    });
+    ant.carryingDebris = null;
+    ant.state = "search";
+    ant.job = "forage";
+    return;
+  }
+
+  moveSurfaceToward(world, ant, entrance, !isColonyStarving(world), false);
+}
+
+export function moveSearchingDebris(world: World, ant: Ant): boolean {
+  let nearestDebris: Debris | null = null;
+  let minDebrisDist = Infinity;
+
+  for (const item of world.surface.debris) {
+    let canCollect = true;
+
+    for (const colony of world.colonies) {
+      const dist = distance(item.pos, colony.surfaceEntrance);
+      const dirtMound = colony.underground?.dirtMound ?? 0;
+      const scale = 1.0 + Math.min(1.8, dirtMound / 400);
+      const minDrop = 3.0 * scale;
+      const forbiddenLimit = minDrop + 12;
+
+      // 1. Хлам внутри нового холмика (но дальше 0.7 от входа) - переносим наружу
+      const isInsideMound = dist >= 0.7 && dist < minDrop;
+      // 2. Хлам на кольце гнезда - не трогаем
+      const isOnDome = dist >= minDrop && dist < forbiddenLimit;
+      // 3. Хлам далеко на карте - собирать можно
+      const isFarAway = dist >= forbiddenLimit;
+
+      if (!isInsideMound && !isFarAway) {
+        canCollect = false;
+        break;
+      }
+    }
+
+    if (!canCollect) {
+      continue;
+    }
+
+    const distToAnt = distance(ant.pos, item.pos);
+    if (distToAnt < minDebrisDist) {
+      minDebrisDist = distToAnt;
+      nearestDebris = item;
+    }
+  }
+
+  if (!nearestDebris) {
+    ant.job = "forage";
+    return false;
+  }
+
+  if (minDebrisDist <= 1.2) {
+    world.surface.debris = world.surface.debris.filter(d => d.id !== nearestDebris!.id);
+    ant.carryingDebris = nearestDebris.type;
+    ant.job = "idle";
+    return true;
+  }
+
+  moveSurfaceToward(world, ant, nearestDebris.pos, !isColonyStarving(world));
   return true;
 }

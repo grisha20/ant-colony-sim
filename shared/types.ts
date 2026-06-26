@@ -64,6 +64,12 @@ export type Brood = {
   isPrincess: boolean;
 };
 
+export type Debris = {
+  id: string;
+  type: "pebble" | "leaf";
+  pos: Vec2;
+};
+
 export type Ant = {
   id: string;
   colonyId: string;
@@ -83,6 +89,7 @@ export type Ant = {
   digTarget?: Vec2;
   digStandPos?: Vec2;
   digProgress?: number;
+  carryingDebris?: "pebble" | "leaf" | null;
 };
 
 export type Queen = {
@@ -170,6 +177,7 @@ export type Surface = {
   entrances: Vec2[];
   foodSources: FoodSource[];
   carrion: FoodSource[];
+  debris: Debris[];
 };
 
 export type SparseGrid = {

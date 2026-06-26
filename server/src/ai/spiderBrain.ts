@@ -228,6 +228,9 @@ function ambushPoint(world: World, spider: Enemy, genome: SpiderGenome): Vec2 {
 }
 
 export function chooseMode(world: World, spider: Enemy, genome: SpiderGenome): SpiderMode {
+  const liveAntsCount = world.ants.filter((a) => a.state !== "dead").length;
+  const isStartPeriod = liveAntsCount <= 10;
+
   const hunger = clamp01(spider.hunger / CONFIG.spiderHungryThreshold);
   const hp = clamp01(spider.hp / Math.max(1, spider.maxHp));
   const crowd = nearbyAntCount(world, spider, genome.genes.swarmCaution);
@@ -252,14 +255,18 @@ export function chooseMode(world: World, spider: Enemy, genome: SpiderGenome): S
     retreat:
       (mobbingFighters >= CONFIG.spiderMobRetreatCount ? CONFIG.spiderMobRetreatUtility : 0) +
       (hp <= CONFIG.spiderLowHpRetreatThreshold ? CONFIG.spiderLowHpRetreatUtility : 0),
-    chase:
-      targetCloseness * (1.2 + genome.genes.aggression) +
-      hunger * (0.7 + genome.genes.hungerAggroGain) -
-      caution * 0.35,
-    stalk: genome.genes.aggression * 0.4 + hunger * (0.6 + antsAround * 0.5) - caution * 0.2,
-    ambush:
-      genome.genes.ambushPreference * (0.45 + hunger * 0.25) +
-      genome.genes.entranceAffinity * entranceCloseness,
+    chase: isStartPeriod
+      ? 0
+      : targetCloseness * (1.2 + genome.genes.aggression) +
+        hunger * (0.7 + genome.genes.hungerAggroGain) -
+        caution * 0.35,
+    stalk: isStartPeriod
+      ? 0
+      : genome.genes.aggression * 0.4 + hunger * (0.6 + antsAround * 0.5) - caution * 0.2,
+    ambush: isStartPeriod
+      ? 0
+      : genome.genes.ambushPreference * (0.45 + hunger * 0.25) +
+        genome.genes.entranceAffinity * entranceCloseness,
     feed: hungry && !underThreat && (spider.hoard > 0 || carrion) ? hunger * 2.4 + carrionCloseness * 0.6 : 0,
     store: !hungry && !underThreat && storageWork ? 1.35 + genome.genes.ambushPreference * 0.25 : 0,
     wander: 0.2 + (1 - hunger) * 0.15

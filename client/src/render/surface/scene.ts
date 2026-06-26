@@ -13,7 +13,7 @@ import {
 import { drawSurfaceGround } from "./ground";
 import { drawSurfacePheromones } from "./pheromones";
 import { drawSurfaceEntrance } from "./entrance";
-import { updateSurfaceFood, updateSurfaceCarrion, updateSurfaceLairs, updateSurfaceEnemies, updateSurfaceAnts, updateSurfaceWebs } from "./entities";
+import { updateSurfaceFood, updateSurfaceCarrion, updateSurfaceLairs, updateSurfaceEnemies, updateSurfaceAnts, updateSurfaceWebs, updateSurfaceDebris } from "./entities";
 
 export function isInBounds(pos: Vec2, bounds: ViewBounds, padding = 0): boolean {
   return (
@@ -40,6 +40,7 @@ export function createSurfaceScene(): SurfaceScene {
   const staticLayer = new Container();
   const pheromones = new Graphics();
   const webs = new Graphics();
+  const debrisGraphics = new Graphics();
   const foodContainer = new Container();
   const carrionContainer = new Container();
   const lairContainer = new Container();
@@ -47,13 +48,14 @@ export function createSurfaceScene(): SurfaceScene {
   const carriedCarrionContainer = new Container();
   const antContainer = new Container();
 
-  root.addChild(staticLayer, pheromones, webs, foodContainer, carrionContainer, lairContainer, enemyContainer, carriedCarrionContainer, antContainer);
+  root.addChild(staticLayer, pheromones, webs, debrisGraphics, foodContainer, carrionContainer, lairContainer, enemyContainer, carriedCarrionContainer, antContainer);
 
   return {
     root,
     staticLayer,
     pheromones,
     webs,
+    debrisGraphics,
     foodPool: createSpritePool(foodContainer, () => createFoodSprite(2.2)),
     carrionPool: createSpritePool(carrionContainer, () => createCarrionSprite(2.6)),
     lairPool: createSpritePool(lairContainer, () => createSpiderLairSprite(3.4)),
@@ -121,10 +123,12 @@ export function renderSurface(
 
   const cell = SURFACE_TILE_SIZE;
   const bounds = visibleSurfaceBounds(camera, viewportWidth, viewportHeight);
+  const dirtMounds = world.colonies?.map((c) => Math.floor((c.underground?.dirtMound ?? 0) / 30)) ?? [Math.floor((world.underground.dirtMound ?? 0) / 30)];
   const staticKey = [
     world.surface.width,
     world.surface.height,
-    ...(world.surface.entrances ?? [world.surface.entrance]).flatMap((entrance) => [entrance.x, entrance.y])
+    ...(world.surface.entrances ?? [world.surface.entrance]).flatMap((entrance) => [entrance.x, entrance.y]),
+    ...dirtMounds
   ].join(":");
   if (scene.staticKey !== staticKey) {
     rebuildSurfaceStatic(scene, renderer, world, cell, staticKey);
@@ -132,9 +136,10 @@ export function renderSurface(
 
   drawSurfacePheromones(scene.pheromones, world, cell, bounds);
   updateSurfaceWebs(scene.webs, world, cell, bounds);
+  updateSurfaceDebris(scene.debrisGraphics, world, cell, bounds);
   updateSurfaceFood(scene.foodPool, world, cell, bounds);
   updateSurfaceCarrion(scene.carrionPool, world, cell, bounds);
   updateSurfaceLairs(scene.lairPool, world, cell, bounds);
   updateSurfaceEnemies(scene.enemyPool, scene.carriedCarrionPool, world, cell, bounds);
-  updateSurfaceAnts(scene.antPool, world, cell, bounds);
+  updateSurfaceAnts(scene.antPool, scene.debrisGraphics, world, cell, bounds);
 }

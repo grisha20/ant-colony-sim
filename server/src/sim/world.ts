@@ -1,4 +1,4 @@
-import type { Ant, Brood, Colony, Enemy, FoodSource, PheromoneSnapshot, Surface, Underground, Vec2, WorldSnapshot } from "../../../shared/types";
+import type { Ant, Brood, Colony, Debris, Enemy, FoodSource, PheromoneSnapshot, Surface, Underground, Vec2, WorldSnapshot } from "../../../shared/types";
 import { computeDirectives, createFitnessState, type ColonyDirectives, type FitnessState } from "../ai/controller";
 import type { GenomeState } from "../ai/genome";
 import type { SpiderGenomeState } from "../ai/spiderGenome";
@@ -93,6 +93,89 @@ function makeCarrionSource(): FoodSource {
 
 function makeCarrionSources(): FoodSource[] {
   return Array.from({ length: CONFIG.carrionCount }, () => makeCarrionSource());
+}
+
+function makeDebrisSources(entrances: Vec2[]): Debris[] {
+  const debris: Debris[] = [];
+  const debrisCount = 8;
+  let nextDebrisId = 1;
+
+  for (let i = 0; i < debrisCount; i++) {
+    let pos = { x: 0, y: 0 };
+    let valid = false;
+
+    for (let attempt = 0; attempt < 100; attempt++) {
+      pos = {
+        x: 3 + Math.random() * (CONFIG.mapWidth - 6),
+        y: 3 + Math.random() * (CONFIG.mapHeight - 6)
+      };
+
+      let minDistance = Infinity;
+      for (const ent of entrances) {
+        const dist = Math.hypot(pos.x - ent.x, pos.y - ent.y);
+        if (dist < minDistance) {
+          minDistance = dist;
+        }
+      }
+
+      if (minDistance >= 25) {
+        valid = true;
+        break;
+      }
+    }
+
+    debris.push({
+      id: `debris-${nextDebrisId}`,
+      type: Math.random() < 0.5 ? "pebble" : "leaf",
+      pos
+    });
+    nextDebrisId += 1;
+  }
+
+  return debris;
+}
+
+export function respawnDebris(world: World): void {
+  if (!world.surface.debris) {
+    world.surface.debris = [];
+  }
+
+  if (world.surface.debris.length >= 15) {
+    return;
+  }
+
+  if (world.tick % 600 === 0 && Math.random() < 0.15) {
+    const entrances = world.colonies.map((c) => c.surfaceEntrance);
+    let pos = { x: 0, y: 0 };
+    let valid = false;
+
+    for (let attempt = 0; attempt < 80; attempt++) {
+      pos = {
+        x: 3 + Math.random() * (CONFIG.mapWidth - 6),
+        y: 3 + Math.random() * (CONFIG.mapHeight - 6)
+      };
+
+      let minDistance = Infinity;
+      for (const ent of entrances) {
+        const dist = Math.hypot(pos.x - ent.x, pos.y - ent.y);
+        if (dist < minDistance) {
+          minDistance = dist;
+        }
+      }
+
+      if (minDistance >= 25) {
+        valid = true;
+        break;
+      }
+    }
+
+    const nextDebrisId = Math.random().toString(36).substr(2, 9);
+    world.surface.debris.push({
+      id: `debris-${nextDebrisId}`,
+      type: Math.random() < 0.5 ? "pebble" : "leaf",
+      pos
+    });
+  }
 }
 
 export function respawnCarrion(world: World): void {
@@ -304,13 +387,15 @@ export function createWorld(
   spiderGenomeState: SpiderGenomeState,
   genomeStateB: GenomeState = genomeState
 ): World {
+  const entrances = [CONFIG.surfaceEntrance, CONFIG.surfaceEntranceB];
   const surface: Surface = {
     width: CONFIG.mapWidth,
     height: CONFIG.mapHeight,
     entrance: CONFIG.surfaceEntrance,
-    entrances: [CONFIG.surfaceEntrance, CONFIG.surfaceEntranceB],
+    entrances,
     foodSources: makeFoodSources(),
-    carrion: makeCarrionSources()
+    carrion: makeCarrionSources(),
+    debris: makeDebrisSources(entrances)
   };
   const enemies = [createSpider()];
   const colonies = [
@@ -411,7 +496,8 @@ export function worldFromSnapshot(
     surface: {
       ...snapshot.surface,
       carrion,
-      entrances: snapshot.surface.entrances ?? colonies.map((colony) => colony.surfaceEntrance)
+      entrances: snapshot.surface.entrances ?? colonies.map((colony) => colony.surfaceEntrance),
+      debris: snapshot.surface.debris ?? makeDebrisSources(snapshot.surface.entrances ?? colonies.map((colony) => colony.surfaceEntrance))
     },
     colony: colonies[0].colony,
     underground: colonies[0].underground,

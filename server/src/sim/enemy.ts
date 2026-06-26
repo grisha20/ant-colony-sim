@@ -135,13 +135,15 @@ function moveSpider(world: World, enemy: Enemy): void {
     return;
   }
 
+  const liveAntsCount = world.ants.filter(a => a.state !== "dead").length;
   if (
     hungry &&
     nearest &&
     nearest.distance <= CONFIG.spiderEngageRange &&
     enemy.hoard <= 0 &&
     !hasAvailableCarrion(world) &&
-    (!underPressure || desperate)
+    (!underPressure || desperate) &&
+    liveAntsCount > 10
   ) {
     spiderModes.set(enemy.id, { mode: "chase", repickAt: world.tick + 1 });
     applySpiderMode(world, enemy, "chase", genome);
@@ -340,12 +342,15 @@ export function updateEnemies(world: World): void {
     const attackRadius = hungry ? CONFIG.spiderHungryAttackRadius : CONFIG.spiderAttackRadius;
     const damage = hungry ? CONFIG.spiderHungryDamage : CONFIG.spiderDamagePerTick;
 
+    const liveAntsCount = world.ants.filter((a) => a.state !== "dead").length;
+    const isStartPeriod = liveAntsCount <= 10;
+
     for (const ant of world.ants) {
       if (ant.layer !== "surface" || ant.state === "dead") {
         continue;
       }
 
-      if (distance(ant.pos, enemy.pos) <= attackRadius) {
+      if (!isStartPeriod && distance(ant.pos, enemy.pos) <= attackRadius) {
         const hadEnergy = ant.energy > 0;
         ant.energy -= damage;
         if (ant.energy <= 0) {

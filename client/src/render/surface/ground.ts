@@ -7,7 +7,7 @@ export function hash2(x: number, y: number, salt = 0): number {
   return value - Math.floor(value);
 }
 
-function drawPebble(root: Graphics, x: number, y: number, size: number, shade: number): void {
+export function drawPebble(root: Graphics, x: number, y: number, size: number, shade: number): void {
   root.ellipse(x + size * 0.18, y + size * 0.22, size * 0.62, size * 0.45).fill({ color: 0x2f2923, alpha: 0.42 });
   root.ellipse(x, y, size * 0.68, size * 0.5).fill(shade);
   root.ellipse(x - size * 0.18, y - size * 0.16, size * 0.22, size * 0.13).fill({ color: 0xe0dcd1, alpha: 0.48 });
@@ -26,7 +26,7 @@ function drawGrassTuft(root: Graphics, x: number, y: number, scale: number, rota
   root.stroke();
 }
 
-function drawLeaf(root: Graphics, x: number, y: number, scale: number, rotation: number): void {
+export function drawLeaf(root: Graphics, x: number, y: number, scale: number, rotation: number): void {
   const dx = Math.cos(rotation);
   const dy = Math.sin(rotation);
   const color = hash2(x, y, 7) > 0.5 ? 0x7a6b24 : 0x3f7a2d;
@@ -87,21 +87,10 @@ export function drawSurfaceGround(root: Container, width: number, height: number
       if (x < left * cell - 24 || x > right * cell + 24 || y < top * cell - 24 || y > bottom * cell + 24) {
         continue;
       }
-      if (roll > 0.93) {
-        drawPebble(decor, x, y, cell * (1.2 + hash2(gx, gy, 23) * 2.9), hash2(gx, gy, 24) > 0.45 ? 0x9c9a91 : 0xb8b5aa);
-      } else if (roll > 0.86) {
+      if (roll > 0.86 && roll <= 0.93) {
         drawGrassTuft(decor, x, y, cell * (0.55 + hash2(gx, gy, 25) * 0.55), hash2(gx, gy, 26) * Math.PI * 2);
-      } else if (roll > 0.8) {
-        drawLeaf(decor, x, y, cell * (0.35 + hash2(gx, gy, 27) * 0.38), hash2(gx, gy, 28) * Math.PI * 2);
       } else if (roll < 0.035) {
         drawCrack(decor, x, y, cell * (0.45 + hash2(gx, gy, 29) * 0.55));
-      } else if (roll < 0.18) {
-        const stones = 2 + Math.floor(hash2(gx, gy, 30) * 4);
-        for (let index = 0; index < stones; index += 1) {
-          const ox = (hash2(gx + index, gy, 31) - 0.5) * cell * 7;
-          const oy = (hash2(gx, gy + index, 32) - 0.5) * cell * 7;
-          drawPebble(decor, x + ox, y + oy, cell * (0.28 + hash2(gx + index, gy, 33) * 0.36), 0xb4b0a6);
-        }
       }
     }
   }

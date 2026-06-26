@@ -41,7 +41,10 @@ import {
   moveHungryHome,
   moveHungryToFood,
   moveNurseHome,
-  moveSearching
+  moveSearching,
+  moveCarryingDebris,
+  moveSearchingDebris,
+  nearestAvailableFood
 } from "./forage";
 
 export function restNodeForAnt(ant: Ant): UndergroundNode {
@@ -191,6 +194,11 @@ export function stepSurface(world: World, ant: Ant): void {
     return;
   }
 
+  if (ant.carryingDebris) {
+    moveCarryingDebris(world, ant);
+    return;
+  }
+
   if (moveFighting(world, ant)) {
     return;
   }
@@ -232,6 +240,28 @@ export function stepSurface(world: World, ant: Ant): void {
   if (ant.energy < world.directives.refuelThreshold && canUseStorageMeal(world)) {
     moveHungryHome(world, ant);
     return;
+  }
+
+  if (ant.job === "idle") {
+    if (moveSearchingDebris(world, ant)) {
+      return;
+    }
+  }
+
+  if (ant.carrying <= 0 && !ant.carryingDebris) {
+    const food = nearestAvailableFood(world, ant);
+    const hasCloseFood = food && distance(ant.pos, food.source.pos) < CONFIG.antFoodSightRadius;
+
+    const colony = world.colonies.find(c => c.id === ant.colonyId);
+    const colonyAntsCount = colony ? colony.ants.length : 0;
+    const foodStorage = colony ? colony.underground.foodStorage : 0;
+
+    if (!hasCloseFood && colonyAntsCount > 10 && foodStorage > 20 && Math.random() < 0.0003) {
+      ant.job = "idle";
+      if (moveSearchingDebris(world, ant)) {
+        return;
+      }
+    }
   }
 
   ant.state = "search";
