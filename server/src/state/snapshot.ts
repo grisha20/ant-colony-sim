@@ -26,7 +26,17 @@ export async function loadWorldSnapshot(
   }
 }
 
+let isSaving = false;
+
 export async function saveWorldSnapshot(world: World): Promise<void> {
-  await mkdir(path.dirname(CONFIG.snapshotFile), { recursive: true });
-  await writeFile(CONFIG.snapshotFile, JSON.stringify(toSnapshot(world), null, 2), "utf8");
+  if (isSaving) {
+    return;
+  }
+  isSaving = true;
+  try {
+    await mkdir(path.dirname(CONFIG.snapshotFile), { recursive: true });
+    await writeFile(CONFIG.snapshotFile, JSON.stringify(toSnapshot(world)), "utf8");
+  } finally {
+    isSaving = false;
+  }
 }

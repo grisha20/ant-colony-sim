@@ -2,6 +2,7 @@ import { computeDirectives, createFitnessState, updateFitness } from "../ai/cont
 import { recordAndEvolve, saveGenome } from "../ai/genome";
 import { CONFIG } from "../config";
 import { stepAnt } from "./ant";
+import { profiler } from "../utils/profiler";
 import { updateBrood, updateQueen } from "./brood";
 import { updateEnemies } from "./enemy";
 import { planEggRoomIfNeeded, planNurseryIfNeeded, refreshDigTasks } from "./underground";
@@ -142,9 +143,11 @@ export function step(world: World): void {
     }
     refreshDigTasks(colony.underground);
     colony.directives = computeDirectives(scopedWorld, colony.genomeState.current);
-    for (const ant of colony.ants) {
-      stepAnt(scopedWorld, ant);
-    }
+    profiler.measure("stepAnt", () => {
+      for (const ant of colony.ants) {
+        stepAnt(scopedWorld, ant);
+      }
+    });
   }
 
   syncWorldLegacyFields(world);
@@ -159,9 +162,13 @@ export function step(world: World): void {
     updateFitness(scopedWorld);
     evolveAfterQueenDeath(world, colony);
     syncColonyStatsForRuntime(colony);
-    colony.homePheromone.evaporateAndDiffuse(CONFIG.pheromoneEvaporation, CONFIG.pheromoneDiffusion);
+    profiler.measure("pheromone.diffuse", () => {
+      colony.homePheromone.evaporateAndDiffuse(CONFIG.pheromoneEvaporation, CONFIG.pheromoneDiffusion);
+    });
   }
 
-  world.pheromones.food.evaporateAndDiffuse(CONFIG.pheromoneEvaporation, CONFIG.pheromoneDiffusion);
+  profiler.measure("pheromone.diffuse", () => {
+    world.pheromones.food.evaporateAndDiffuse(CONFIG.pheromoneEvaporation, CONFIG.pheromoneDiffusion);
+  });
   syncWorldLegacyFields(world);
 }
