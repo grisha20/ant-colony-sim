@@ -13,7 +13,7 @@ import {
 import { drawSurfaceGround } from "./ground";
 import { drawSurfacePheromones } from "./pheromones";
 import { drawSurfaceEntrance } from "./entrance";
-import { updateSurfaceFood, updateSurfaceCarrion, updateSurfaceLairs, updateSurfaceEnemies, updateSurfaceAnts } from "./entities";
+import { updateSurfaceFood, updateSurfaceCarrion, updateSurfaceLairs, updateSurfaceEnemies, updateSurfaceAnts, updateSurfaceWebs } from "./entities";
 
 export function isInBounds(pos: Vec2, bounds: ViewBounds, padding = 0): boolean {
   return (
@@ -39,6 +39,7 @@ export function createSurfaceScene(): SurfaceScene {
   const root = new Container();
   const staticLayer = new Container();
   const pheromones = new Graphics();
+  const webs = new Graphics();
   const foodContainer = new Container();
   const carrionContainer = new Container();
   const lairContainer = new Container();
@@ -46,12 +47,13 @@ export function createSurfaceScene(): SurfaceScene {
   const carriedCarrionContainer = new Container();
   const antContainer = new Container();
 
-  root.addChild(staticLayer, pheromones, foodContainer, carrionContainer, lairContainer, enemyContainer, carriedCarrionContainer, antContainer);
+  root.addChild(staticLayer, pheromones, webs, foodContainer, carrionContainer, lairContainer, enemyContainer, carriedCarrionContainer, antContainer);
 
   return {
     root,
     staticLayer,
     pheromones,
+    webs,
     foodPool: createSpritePool(foodContainer, () => createFoodSprite(2.2)),
     carrionPool: createSpritePool(carrionContainer, () => createCarrionSprite(2.6)),
     lairPool: createSpritePool(lairContainer, () => createSpiderLairSprite(3.4)),
@@ -129,6 +131,7 @@ export function renderSurface(
   }
 
   drawSurfacePheromones(scene.pheromones, world, cell, bounds);
+  updateSurfaceWebs(scene.webs, world, cell, bounds);
   updateSurfaceFood(scene.foodPool, world, cell, bounds);
   updateSurfaceCarrion(scene.carrionPool, world, cell, bounds);
   updateSurfaceLairs(scene.lairPool, world, cell, bounds);

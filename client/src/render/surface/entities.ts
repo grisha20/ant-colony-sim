@@ -1,3 +1,4 @@
+import { Graphics } from "pixi.js";
 import type { WorldSnapshot } from "../../../../shared/types";
 import { acquireSprite, antRotation, beginPool, deterministicOffset, endPool, placeSprite } from "../spritePool";
 import type { SpritePool, ViewBounds } from "../types";
@@ -61,6 +62,45 @@ export function updateSurfaceLairs(pool: SpritePool, world: WorldSnapshot, cell:
   }
 
   endPool(pool);
+}
+
+export function updateSurfaceWebs(graphics: Graphics, world: WorldSnapshot, cell: number, bounds: ViewBounds): void {
+  graphics.clear();
+
+  for (const enemy of world.enemies) {
+    if (enemy.type !== "spider" || !enemy.lair || enemy.hp <= 0) {
+      continue;
+    }
+
+    const lairX = enemy.lair.x * cell;
+    const lairY = enemy.lair.y * cell;
+    const webRadius = 14 * cell;
+
+    if (!isInBounds(enemy.lair, bounds, 16)) {
+      continue;
+    }
+
+    // 1. Радиальные лучи
+    const rayCount = 16;
+    for (let i = 0; i < rayCount; i += 1) {
+      const angle = (Math.PI * 2 * i) / rayCount;
+      graphics.moveTo(lairX, lairY);
+      graphics.lineTo(lairX + Math.cos(angle) * webRadius, lairY + Math.sin(angle) * webRadius);
+    }
+
+    // 2. Спиральная паутина
+    const spiralTurns = 5;
+    const steps = 120;
+    graphics.moveTo(lairX, lairY);
+    for (let i = 0; i <= steps; i += 1) {
+      const angle = (Math.PI * 2 * spiralTurns * i) / steps;
+      const currentRadius = (webRadius * i) / steps;
+      graphics.lineTo(lairX + Math.cos(angle) * currentRadius, lairY + Math.sin(angle) * currentRadius);
+    }
+
+    // В PixiJS v8 нужно явно вызвать stroke, чтобы нарисовать все накопленные линии
+    graphics.stroke({ width: 1.6, color: 0xffffff, alpha: 0.42 });
+  }
 }
 
 export function updateSurfaceEnemies(

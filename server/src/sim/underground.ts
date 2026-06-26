@@ -418,7 +418,7 @@ function chooseRoomPlan(
   const seed = Math.round(queen.x * 13 + queen.y * 7 + (roomType === "nursery" ? 101 : 211));
   const candidates: Array<{ bounds: { x: number; y: number; width: number; height: number }; score: number }> = [];
 
-  for (let radius = 9; radius <= 24; radius += 2) {
+  for (let radius = 9; radius <= 60; radius += 2) {
     for (let angleIndex = 0; angleIndex < 18; angleIndex += 1) {
       const angle = (Math.PI * 2 * angleIndex) / 18 + seededNoise(seed, radius, angleIndex) * 0.34;
       const center = clampRoomCenter(

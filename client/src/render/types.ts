@@ -31,6 +31,7 @@ export type SurfaceScene = {
   root: Container;
   staticLayer: Container;
   pheromones: Graphics;
+  webs: Graphics;
   foodPool: SpritePool;
   carrionPool: SpritePool;
   lairPool: SpritePool;

@@ -21,9 +21,21 @@ export function surfaceMoveSpeed(world: World, ant: Ant): number {
     }
   }
 
-  return nearbyWorkers >= CONFIG.antMobCountThreshold
+  let speed = nearbyWorkers >= CONFIG.antMobCountThreshold
     ? CONFIG.workerSurfaceSpeed + CONFIG.antMobSpeedBonus
     : CONFIG.workerSurfaceSpeed;
+
+  // Замедление муравьев на паутине вокруг гнезда паука
+  for (const enemy of world.enemies) {
+    if (enemy.type === "spider" && enemy.hp > 0) {
+      if (distance(ant.pos, enemy.lair) <= CONFIG.spiderLairWebRadius) {
+        speed *= CONFIG.spiderWebSpeedPenalty;
+        break;
+      }
+    }
+  }
+
+  return speed;
 }
 
 export function moveSurfaceToward(world: World, ant: Ant, target: Vec2, avoidSpiders: boolean, allowSeparation = true): void {
@@ -35,7 +47,11 @@ export function moveSurfaceToward(world: World, ant: Ant, target: Vec2, avoidSpi
   }
 
   if (allowSeparation) {
-    desired = applySeparation(world, ant, desired);
+    const dist = distance(ant.pos, target);
+    const isTargetEntrance = target.x === world.surface.entrance.x && target.y === world.surface.entrance.y;
+    if (!isTargetEntrance || dist > 8.0) {
+      desired = applySeparation(world, ant, desired);
+    }
   }
 
   const dist = distance(ant.pos, target);

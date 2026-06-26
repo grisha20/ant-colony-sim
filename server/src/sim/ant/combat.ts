@@ -1,6 +1,7 @@
 import type { Ant, Vec2 } from "../../../../shared/types";
 import { CONFIG } from "../../config";
 import { tickCache } from "../cache";
+import { addFoodSource } from "../world";
 import type { World } from "../world";
 import { distance, normalize } from "./utils";
 import {
@@ -120,13 +121,21 @@ export function nearestSuperFood(world: World, pos: Vec2): { pos: Vec2; amount: 
   return nearest;
 }
 
+export function dropCarriedFood(world: World, ant: Ant): void {
+  if (ant.carrying > 0) {
+    addFoodSource(world, ant.pos.x, ant.pos.y, ant.carrying);
+    ant.carrying = 0;
+  }
+}
+
 export function handleEnemyColonyCombat(world: World, ant: Ant): boolean {
-  if (ant.carrying > 0 || ant.layer !== "surface") {
+  if (ant.layer !== "surface") {
     return false;
   }
 
   const nearest = nearestEnemyAnt(world, ant);
   if (nearest && nearest.distance <= CONFIG.antCombatRadius) {
+    dropCarriedFood(world, ant);
     ant.state = "fight";
     ant.heading = normalize({ x: nearest.ant.pos.x - ant.pos.x, y: nearest.ant.pos.y - ant.pos.y });
     nearest.ant.energy -= CONFIG.antVsAntDamage * ant.strength;
@@ -146,6 +155,7 @@ export function handleEnemyColonyCombat(world: World, ant: Ant): boolean {
     if (nearest && distance(nearest.ant.pos, superFood.pos) <= CONFIG.superFoodCombatRadius) {
       const chaseRadius = CONFIG.antCombatRadius + (CONFIG.superFoodCombatRadius - CONFIG.antCombatRadius) * world.directives.aggression;
       if (nearest.distance <= chaseRadius) {
+        dropCarriedFood(world, ant);
         ant.state = "fight";
         moveSurfaceToward(world, ant, nearest.ant.pos, false);
         return true;
@@ -162,6 +172,7 @@ export function handleEnemyColonyCombat(world: World, ant: Ant): boolean {
     return false;
   }
 
+  dropCarriedFood(world, ant);
   ant.state = "fight";
   moveSurfaceToward(world, ant, target, false);
   return true;
@@ -227,11 +238,13 @@ export function moveFighting(world: World, ant: Ant): boolean {
   const enemy = world.enemies[nearest.index];
   const enemyDistance = distance(ant.pos, enemy.pos);
   if (enemyDistance <= CONFIG.spiderAttackRadius) {
+    dropCarriedFood(world, ant);
     ant.state = "fight";
     ant.heading = normalize({ x: enemy.pos.x - ant.pos.x, y: enemy.pos.y - ant.pos.y });
     return true;
   }
 
+  dropCarriedFood(world, ant);
   ant.state = "fight";
   moveSurfaceToward(world, ant, enemy.pos, false);
   return true;
