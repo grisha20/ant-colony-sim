@@ -13,6 +13,7 @@ export type GenomeGenes = {
   layReserve: Gene;
   refuelThreshold: Gene;
   spiderAvoid: Gene;
+  aggression: Gene;
 };
 
 export type Genome = {
@@ -44,7 +45,8 @@ const geneNames: GeneName[] = [
   "spiderAttackStorage",
   "layReserve",
   "refuelThreshold",
-  "spiderAvoid"
+  "spiderAvoid",
+  "aggression"
 ];
 
 function newGenomeId(): string {
@@ -66,7 +68,8 @@ function defaultGenes(): GenomeGenes {
     spiderAttackStorage: clampGene("spiderAttackStorage", CONFIG.starveStorageThreshold),
     layReserve: clampGene("layReserve", CONFIG.queenMinFoodReserve),
     refuelThreshold: clampGene("refuelThreshold", CONFIG.refuelEnergyThreshold),
-    spiderAvoid: clampGene("spiderAvoid", CONFIG.spiderAvoidRadius)
+    spiderAvoid: clampGene("spiderAvoid", CONFIG.spiderAvoidRadius),
+    aggression: clampGene("aggression", 0.3)
   };
 }
 
@@ -88,7 +91,8 @@ function normalizeGenome(genome: Partial<Genome> | null | undefined, fallbackGen
       ),
       layReserve: clampGene("layReserve", Number(genes.layReserve ?? fallback.layReserve)),
       refuelThreshold: clampGene("refuelThreshold", Number(genes.refuelThreshold ?? fallback.refuelThreshold)),
-      spiderAvoid: clampGene("spiderAvoid", Number(genes.spiderAvoid ?? fallback.spiderAvoid))
+      spiderAvoid: clampGene("spiderAvoid", Number(genes.spiderAvoid ?? fallback.spiderAvoid)),
+      aggression: clampGene("aggression", Number(genes.aggression ?? fallback.aggression))
     }
   };
 }

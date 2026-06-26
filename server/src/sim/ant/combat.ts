@@ -101,6 +101,25 @@ export function nearestEnemyNest(world: World, ant: Ant): Vec2 | null {
   return nearest?.pos ?? null;
 }
 
+export function nearestSuperFood(world: World, pos: Vec2): { pos: Vec2; amount: number } | null {
+  let nearest: { pos: Vec2; amount: number } | null = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  for (const list of [world.surface.foodSources, world.surface.carrion]) {
+    for (const source of list) {
+      if (source.amount >= CONFIG.superFoodAmountThreshold) {
+        const dist = distance(pos, source.pos);
+        if (dist < nearestDistance) {
+          nearestDistance = dist;
+          nearest = source;
+        }
+      }
+    }
+  }
+
+  return nearest;
+}
+
 export function handleEnemyColonyCombat(world: World, ant: Ant): boolean {
   if (ant.carrying > 0 || ant.layer !== "surface") {
     return false;
@@ -119,6 +138,19 @@ export function handleEnemyColonyCombat(world: World, ant: Ant): boolean {
       ant.state = "dead";
     }
     return true;
+  }
+
+  // Проверяем борьбу за супер-ресурсы в зависимости от агрессии
+  const superFood = nearestSuperFood(world, ant.pos);
+  if (superFood && distance(ant.pos, superFood.pos) <= CONFIG.superFoodCombatRadius) {
+    if (nearest && distance(nearest.ant.pos, superFood.pos) <= CONFIG.superFoodCombatRadius) {
+      const chaseRadius = CONFIG.antCombatRadius + (CONFIG.superFoodCombatRadius - CONFIG.antCombatRadius) * world.directives.aggression;
+      if (nearest.distance <= chaseRadius) {
+        ant.state = "fight";
+        moveSurfaceToward(world, ant, nearest.ant.pos, false);
+        return true;
+      }
+    }
   }
 
   if (!isColonyWarHungry(world)) {

@@ -203,7 +203,8 @@ function makeDefaultDirectives(): ColonyDirectives {
     activeTarget: CONFIG.minForagers,
     nurseTarget: 0,
     diggerTarget: Math.min(CONFIG.maxDiggers, Math.round(CONFIG.startingWorkers * 0.15)),
-    queenRearThreshold: CONFIG.queenRearStressThreshold
+    queenRearThreshold: CONFIG.queenRearStressThreshold,
+    aggression: 0.3
   };
 }
 

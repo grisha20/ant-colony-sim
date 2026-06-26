@@ -14,6 +14,7 @@ export type ColonyDirectives = {
   nurseTarget: number;
   diggerTarget: number;
   queenRearThreshold: number;
+  aggression: number;
 };
 
 export type FitnessState = {
@@ -93,7 +94,12 @@ export function computeDirectives(world: World, genome: Genome): ColonyDirective
     activeTarget,
     nurseTarget,
     diggerTarget,
-    queenRearThreshold
+    queenRearThreshold,
+    aggression: clamp(
+      genome.genes.aggression,
+      CONFIG.genomeGeneBounds.aggression.min,
+      CONFIG.genomeGeneBounds.aggression.max
+    )
   };
 }
 

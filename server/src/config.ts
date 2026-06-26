@@ -88,6 +88,10 @@ export const CONFIG = {
   antAlertRange: 10,
   antSpiderSightRadius: 14,
   antFoodSightRadius: 18,
+  superFoodAmountThreshold: 80,
+  superFoodSightRadius: 45,
+  superFoodDirectApproachRange: 35,
+  superFoodCombatRadius: 15,
   antMobCount: 6,
   antMobSpeedBonus: 0.3,
   antMobCountThreshold: 3,
@@ -221,7 +225,8 @@ export const CONFIG = {
     spiderAttackStorage: { min: 0, max: 60 },
     layReserve: { min: 10, max: 40 },
     refuelThreshold: { min: 200, max: 600 },
-    spiderAvoid: { min: 4, max: 12 }
+    spiderAvoid: { min: 4, max: 12 },
+    aggression: { min: 0, max: 1 }
   },
 
   spiderGeneBounds: {

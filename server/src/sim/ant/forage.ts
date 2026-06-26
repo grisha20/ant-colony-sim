@@ -118,7 +118,10 @@ export function moveSearching(world: World, ant: Ant): void {
     return;
   }
 
-  if (food && distance(ant.pos, food.source.pos) <= CONFIG.foodDirectApproachRange) {
+  const isSuper = food && food.source.amount >= CONFIG.superFoodAmountThreshold;
+  const approachRange = isSuper ? CONFIG.superFoodDirectApproachRange : CONFIG.foodDirectApproachRange;
+
+  if (food && distance(ant.pos, food.source.pos) <= approachRange) {
     ant.state = "search";
     moveSurfaceToward(world, ant, food.source.pos, false);
     return;
@@ -142,8 +145,9 @@ export function moveSearching(world: World, ant: Ant): void {
   const gradientPower = Math.min(2.5, gradient.strength) * CONFIG.pheromoneGradientWeight;
   const nearestFood = food?.source ?? null;
   const nearestFoodDistance = nearestFood ? distance(ant.pos, nearestFood.pos) : Number.POSITIVE_INFINITY;
+  const sightRadius = isSuper ? CONFIG.superFoodSightRadius : CONFIG.antFoodSightRadius;
   const directFood =
-    nearestFood && nearestFoodDistance <= CONFIG.antFoodSightRadius
+    nearestFood && nearestFoodDistance <= sightRadius
       ? normalize({ x: nearestFood.pos.x - ant.pos.x, y: nearestFood.pos.y - ant.pos.y })
       : null;
 
