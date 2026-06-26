@@ -1,5 +1,6 @@
 import type { Ant, Brood, UndergroundRoom, Vec2 } from "../../../shared/types";
 import { CONFIG } from "../config";
+import { tickCache } from "./cache";
 import type { UndergroundNode } from "./nav";
 import {
   completeDigTile,
@@ -50,13 +51,18 @@ function moveToward(ant: Ant, target: Vec2, speed: number): void {
 }
 
 function surfaceMoveSpeed(world: World, ant: Ant): number {
-  const nearbyWorkers = world.ants.filter(
-    (other) =>
-      other.id !== ant.id &&
-      other.layer === "surface" &&
-      other.state !== "dead" &&
-      distance(other.pos, ant.pos) <= CONFIG.defenseRadius
-  ).length;
+  let nearbyWorkers = 0;
+  const list = tickCache.surfaceAnts;
+  const len = list.length;
+  const defRad = CONFIG.defenseRadius;
+  for (let i = 0; i < len; i += 1) {
+    const other = list[i];
+    if (other.id !== ant.id) {
+      if (distance(other.pos, ant.pos) <= defRad) {
+        nearbyWorkers += 1;
+      }
+    }
+  }
 
   return nearbyWorkers >= CONFIG.antMobCountThreshold
     ? CONFIG.workerSurfaceSpeed + CONFIG.antMobSpeedBonus
@@ -160,46 +166,74 @@ function findDugPathNext(world: World, from: Vec2, to: Vec2): Vec2 | null {
     return target;
   }
 
-  const queue: Vec2[] = [start];
-  const cameFrom = new Map<string, string | null>([[tileKey(start), null]]);
+  const w = world.underground.width;
+  const h = world.underground.height;
+  const size = w * h;
+
+  // Очередь индексов
+  const queue = new Int32Array(size);
+  let head = 0;
+  let tail = 0;
+
+  // Храним индексы предков. Инициализируем -1
+  const cameFrom = new Int32Array(size);
+  cameFrom.fill(-1);
+
+  const startIndex = start.y * w + start.x;
+  const targetIndex = target.y * w + target.x;
+
+  queue[tail++] = startIndex;
+  cameFrom[startIndex] = -2; // Метка старта
+
   const dirs = [
-    { x: 1, y: 0 },
-    { x: -1, y: 0 },
-    { x: 0, y: 1 },
-    { x: 0, y: -1 }
+    { dx: 1, dy: 0 },
+    { dx: -1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: 0, dy: -1 }
   ];
 
-  while (queue.length > 0) {
-    const current = queue.shift() as Vec2;
-    if (current.x === target.x && current.y === target.y) {
+  let found = false;
+  while (head < tail) {
+    const currIndex = queue[head++];
+    if (currIndex === targetIndex) {
+      found = true;
       break;
     }
 
-    for (const dir of dirs) {
-      const next = { x: current.x + dir.x, y: current.y + dir.y };
-      const key = tileKey(next);
-      if (cameFrom.has(key) || !isDugTile(world.underground, next.x, next.y)) {
-        continue;
+    const cy = Math.floor(currIndex / w);
+    const cx = currIndex % w;
+
+    for (let i = 0; i < 4; i += 1) {
+      const dir = dirs[i];
+      const nx = cx + dir.dx;
+      const ny = cy + dir.dy;
+
+      if (nx >= 0 && nx < w && ny >= 0 && ny < h) {
+        const nextIndex = ny * w + nx;
+        if (cameFrom[nextIndex] === -1 && isDugTile(world.underground, nx, ny)) {
+          cameFrom[nextIndex] = currIndex;
+          queue[tail++] = nextIndex;
+        }
       }
-      cameFrom.set(key, tileKey(current));
-      queue.push(next);
     }
   }
 
-  const targetKey = tileKey(target);
-  if (!cameFrom.has(targetKey)) {
+  if (!found || cameFrom[targetIndex] === -1) {
     return null;
   }
 
-  let cursorKey = targetKey;
-  let previousKey = cameFrom.get(cursorKey);
-  while (previousKey && previousKey !== tileKey(start)) {
-    cursorKey = previousKey;
-    previousKey = cameFrom.get(cursorKey);
+  // Восстанавливаем путь назад до первого шага от старта
+  let curr = targetIndex;
+  let prev = cameFrom[curr];
+  while (prev !== -2 && prev !== startIndex && prev !== -1) {
+    curr = prev;
+    prev = cameFrom[curr];
   }
 
-  const [x, y] = cursorKey.split(":").map(Number);
-  return { x, y };
+  return {
+    x: curr % w,
+    y: Math.floor(curr / w)
+  };
 }
 
 function moveUndergroundToward(world: World, ant: Ant, target: Vec2, speed: number = CONFIG.workerUndergroundSpeed): boolean {
@@ -263,17 +297,7 @@ function restUnderground(world: World, ant: Ant): void {
 }
 
 function queenGuardIds(world: World): Set<string> {
-  if (world.underground.brood.length > 0) {
-    return new Set();
-  }
-
-  return new Set(
-    world.ants
-      .filter((ant) => ant.layer === "underground" && ant.state === "idle" && ant.carrying <= 0)
-      .sort((a, b) => numericAntId(a.id) - numericAntId(b.id))
-      .slice(0, CONFIG.maxNurses)
-      .map((ant) => ant.id)
-  );
+  return tickCache.queenGuardIds;
 }
 
 function guardQueen(world: World, ant: Ant): void {
@@ -443,9 +467,14 @@ function isThreateningSpider(world: World, spiderIndex: number): boolean {
   }
 
   const attackRadius = spiderAttackRadius(enemy);
-  return world.ants.some(
-    (ant) => ant.layer === "surface" && ant.state !== "dead" && distance(ant.pos, enemy.pos) <= attackRadius
-  );
+  const list = tickCache.surfaceAnts;
+  const len = list.length;
+  for (let i = 0; i < len; i += 1) {
+    if (distance(list[i].pos, enemy.pos) <= attackRadius) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function defenderCountForSpider(world: World, spiderIndex: number): number {
@@ -454,13 +483,17 @@ function defenderCountForSpider(world: World, spiderIndex: number): number {
     return 0;
   }
 
-  return world.ants.filter(
-    (ant) =>
-      ant.layer === "surface" &&
-      ant.state === "fight" &&
-      ant.carrying <= 0 &&
-      distance(ant.pos, enemy.pos) <= CONFIG.defenseRadius
-  ).length;
+  let count = 0;
+  const list = tickCache.surfaceAnts;
+  const len = list.length;
+  const defRad = CONFIG.defenseRadius;
+  for (let i = 0; i < len; i += 1) {
+    const ant = list[i];
+    if (ant.state === "fight" && ant.carrying <= 0 && distance(ant.pos, enemy.pos) <= defRad) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function freeWorkerCountNearSpider(world: World, spiderIndex: number): number {
@@ -469,19 +502,72 @@ function freeWorkerCountNearSpider(world: World, spiderIndex: number): number {
     return 0;
   }
 
-  return world.ants.filter(
-    (ant) =>
-      ant.layer === "surface" &&
-      ant.state !== "dead" &&
-      ant.carrying <= 0 &&
-      distance(ant.pos, enemy.pos) <= CONFIG.defenseRadius
-  ).length;
+  let count = 0;
+  const list = tickCache.surfaceAnts;
+  const len = list.length;
+  const defRad = CONFIG.defenseRadius;
+  for (let i = 0; i < len; i += 1) {
+    const ant = list[i];
+    if (ant.carrying <= 0 && distance(ant.pos, enemy.pos) <= defRad) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function activeSurfaceForagers(world: World): number {
-  return world.ants.filter(
-    (ant) => ant.layer === "surface" && ant.state === "search" && ant.carrying <= 0 && ant.job !== "nurse" && ant.job !== "dig"
-  ).length;
+  return tickCache.activeForagers;
+}
+
+function countActiveAndTransitioningForagers(world: World): number {
+  let count = 0;
+  const len = world.ants.length;
+  for (let i = 0; i < len; i += 1) {
+    const ant = world.ants[i];
+    if (ant.state === "dead") {
+      continue;
+    }
+    if (ant.layer === "surface") {
+      if (ant.state === "search" && ant.carrying <= 0 && ant.job !== "nurse" && ant.job !== "dig") {
+        count += 1;
+      }
+    } else {
+      if (ant.state === "toEntrance") {
+        count += 1;
+      }
+    }
+  }
+  return count;
+}
+
+function countUndergroundNurses(world: World): number {
+  let count = 0;
+  const len = world.ants.length;
+  for (let i = 0; i < len; i += 1) {
+    const ant = world.ants[i];
+    if (ant.state === "dead") {
+      continue;
+    }
+    if (ant.layer === "underground" && (ant.state === "carryBrood" || ant.state === "feed")) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function countUndergroundDiggers(world: World): number {
+  let count = 0;
+  const len = world.ants.length;
+  for (let i = 0; i < len; i += 1) {
+    const ant = world.ants[i];
+    if (ant.state === "dead") {
+      continue;
+    }
+    if (ant.layer === "underground" && (ant.state === "dig" || ant.state === "carryDirt" || ant.carryingDirt)) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function scoutDirection(world: World, ant: Ant): Vec2 {
@@ -563,7 +649,15 @@ function handleEnemyColonyCombat(world: World, ant: Ant): boolean {
 }
 
 function shouldReturnFromSurface(world: World, ant: Ant): boolean {
-  return ant.state !== "return" && ant.carrying <= 0 && activeSurfaceForagers(world) > world.directives.activeTarget;
+  if (ant.state === "return" || ant.carrying > 0) {
+    return false;
+  }
+  const activeForagers = activeSurfaceForagers(world);
+  if (activeForagers <= world.directives.activeTarget) {
+    return false;
+  }
+  // Stochastic check: prevents feedback loops and sudden drops.
+  return Math.random() < 0.15;
 }
 
 function retreatFromSpiderToEntrance(world: World, ant: Ant, spiderPos: Vec2): void {
@@ -654,7 +748,7 @@ function applySeparation(world: World, ant: Ant, desired: Vec2): Vec2 {
 }
 
 function busyNurseCount(world: World): number {
-  return world.ants.filter((ant) => ant.layer === "underground" && (ant.state === "carryBrood" || ant.state === "feed")).length;
+  return countUndergroundNurses(world);
 }
 
 function needsBroodTransport(brood: Brood): boolean {
@@ -670,19 +764,11 @@ function pendingBroodTransportCount(world: World): number {
 }
 
 function activeNurseLaborCount(world: World): number {
-  return world.ants.filter(
-    (ant) =>
-      (ant.layer === "underground" && (ant.state === "carryBrood" || ant.state === "feed")) ||
-      (ant.layer === "surface" && ant.job === "nurse" && ant.state === "return")
-  ).length;
+  return tickCache.activeNurses;
 }
 
 function activeDigLaborCount(world: World): number {
-  return world.ants.filter(
-    (ant) =>
-      (ant.layer === "underground" && (ant.state === "dig" || ant.state === "carryDirt" || ant.carryingDirt)) ||
-      (ant.layer === "surface" && ant.job === "dig" && ant.state === "return")
-  ).length;
+  return tickCache.activeDiggers;
 }
 
 function needsSurfaceNurseReturn(world: World): boolean {
@@ -864,8 +950,6 @@ function moveCarryingDirt(world: World, ant: Ant): boolean {
 }
 
 function moveDigging(world: World, ant: Ant): boolean {
-  refreshDigTasks(world.underground);
-
   if (ant.carryingDirt || ant.state === "carryDirt") {
     return moveCarryingDirt(world, ant);
   }
@@ -937,9 +1021,7 @@ function assignDigTask(world: World, ant: Ant): boolean {
     return false;
   }
 
-  const activeDiggers = world.ants.filter(
-    (other) => other.layer === "underground" && (other.state === "dig" || other.state === "carryDirt")
-  ).length;
+  const activeDiggers = countUndergroundDiggers(world);
   if (activeDiggers >= world.directives.diggerTarget) {
     return false;
   }
@@ -1247,6 +1329,12 @@ function stepUnderground(world: World, ant: Ant): void {
     }
   }
 
+  if (ant.state === "toEntrance") {
+    moveUndergroundToNode(world, ant, "entrance");
+    tryCrossLayer(world, ant);
+    return;
+  }
+
   if (assignNurseTask(world, ant)) {
     return;
   }
@@ -1269,7 +1357,7 @@ function stepUnderground(world: World, ant: Ant): void {
     return;
   }
 
-  if (activeSurfaceForagers(world) >= world.directives.activeTarget) {
+  if (countActiveAndTransitioningForagers(world) >= world.directives.activeTarget) {
     restUnderground(world, ant);
     return;
   }

@@ -1,0 +1,85 @@
+import type { Ant, Vec2 } from "../../../shared/types";
+import { CONFIG } from "../config";
+import type { World } from "./world";
+
+function distance(a: Vec2, b: Vec2): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function numericAntId(id: string): number {
+  const numericId = Number(id.replace("ant-", ""));
+  return Number.isFinite(numericId) ? numericId : 0;
+}
+
+export const tickCache = {
+  activeForagers: 0,
+  activeNurses: 0,
+  activeDiggers: 0,
+  undergroundDiggers: 0,
+  undergroundNurses: 0,
+  surfaceAnts: [] as Ant[],
+  queenGuardIds: new Set<string>()
+};
+
+export function updateTickCache(world: World): void {
+  let activeForagers = 0;
+  let activeNurses = 0;
+  let activeDiggers = 0;
+  let undergroundDiggers = 0;
+  let undergroundNurses = 0;
+  const surfaceAnts: Ant[] = [];
+  const idleUndergroundAnts: Ant[] = [];
+
+  const ants = world.ants;
+  const len = ants.length;
+  for (let i = 0; i < len; i += 1) {
+    const ant = ants[i];
+    if (ant.state === "dead") {
+      continue;
+    }
+
+    if (ant.layer === "surface") {
+      surfaceAnts.push(ant);
+
+      if (ant.state === "search" && ant.carrying <= 0 && ant.job !== "nurse" && ant.job !== "dig") {
+        activeForagers += 1;
+      }
+      if (ant.job === "nurse" && ant.state === "return") {
+        activeNurses += 1;
+      }
+      if (ant.job === "dig" && ant.state === "return") {
+        activeDiggers += 1;
+      }
+    } else if (ant.layer === "underground") {
+      if (ant.state === "carryBrood" || ant.state === "feed") {
+        activeNurses += 1;
+        undergroundNurses += 1;
+      }
+      if (ant.state === "dig" || ant.state === "carryDirt" || ant.carryingDirt) {
+        activeDiggers += 1;
+        undergroundDiggers += 1;
+      }
+      if (ant.state === "idle" && ant.carrying <= 0) {
+        idleUndergroundAnts.push(ant);
+      }
+    }
+  }
+
+  // Вычисляем queenGuardIds
+  const guardIds = new Set<string>();
+  if (world.underground.brood.length === 0) {
+    idleUndergroundAnts.sort((a, b) => numericAntId(a.id) - numericAntId(b.id));
+    const guardCount = Math.min(idleUndergroundAnts.length, CONFIG.maxNurses);
+    for (let i = 0; i < guardCount; i += 1) {
+      guardIds.add(idleUndergroundAnts[i].id);
+    }
+  }
+
+  tickCache.activeForagers = activeForagers;
+  tickCache.activeNurses = activeNurses;
+  tickCache.activeDiggers = activeDiggers;
+  tickCache.undergroundDiggers = undergroundDiggers;
+  tickCache.undergroundNurses = undergroundNurses;
+  tickCache.surfaceAnts = surfaceAnts;
+  tickCache.queenGuardIds = guardIds;
+}
