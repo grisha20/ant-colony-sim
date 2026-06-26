@@ -1,11 +1,9 @@
 import { Graphics } from "pixi.js";
-import type { Container } from "pixi.js";
 import type { WorldSnapshot } from "../../../../shared/types";
 import { UNDERGROUND_WIDTH, UNDERGROUND_HEIGHT, SHOW_UNDERGROUND_DEBUG, undergroundLayout } from "../types";
 import { undergroundEntranceTop, undergroundGridMetrics } from "./utils";
 
-export function drawUndergroundEarth(root: Container): void {
-  const earth = new Graphics();
+export function drawUndergroundEarth(earth: Graphics): void {
   earth.rect(0, 0, UNDERGROUND_WIDTH, UNDERGROUND_HEIGHT).fill(0x5a3a1a);
   earth.rect(0, 0, UNDERGROUND_WIDTH, undergroundLayout.surfaceY).fill(0x9fb86b);
   earth.rect(0, undergroundLayout.surfaceY - 16, UNDERGROUND_WIDTH, 16).fill(0x5f422b);
@@ -22,14 +20,11 @@ export function drawUndergroundEarth(root: Container): void {
       }
     }
   }
-
-  root.addChild(earth);
 }
 
-export function drawUndergroundGrid(root: Container, world: WorldSnapshot): void {
+export function drawUndergroundGrid(grid: Graphics, world: WorldSnapshot): void {
   const entranceTop = undergroundEntranceTop(world);
   const metrics = undergroundGridMetrics(world);
-  const grid = new Graphics();
 
   for (let y = 0; y < world.underground.grid.length; y += 1) {
     const row = world.underground.grid[y];
@@ -77,5 +72,4 @@ export function drawUndergroundGrid(root: Container, world: WorldSnapshot): void
 
   grid.ellipse(entranceTop.x, entranceTop.y, 24, 10).fill(0x2d1b12);
   grid.ellipse(entranceTop.x, entranceTop.y + 2, 14, 7).fill(0x100a07);
-  root.addChild(grid);
 }

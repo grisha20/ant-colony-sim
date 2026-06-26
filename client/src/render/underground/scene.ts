@@ -1,4 +1,4 @@
-import { Container } from "pixi.js";
+import { Container, Graphics } from "pixi.js";
 import type { WorldSnapshot } from "../../../../shared/types";
 import { createSpritePool, fitRoot } from "../spritePool";
 import type { UndergroundScene } from "../types";
@@ -22,6 +22,13 @@ export function createUndergroundScene(): UndergroundScene {
   const antContainer = new Container();
   const queen = createQueenSprite(4);
 
+  const earthGraphics = new Graphics();
+  const gridGraphics = new Graphics();
+  staticLayer.addChild(earthGraphics, gridGraphics);
+
+  // Отрисовываем фон земли ровно один раз при создании сцены
+  drawUndergroundEarth(earthGraphics);
+
   root.addChild(staticLayer, storageContainer, carrionContainer, eggContainer, queen, antContainer);
 
   return {
@@ -32,14 +39,15 @@ export function createUndergroundScene(): UndergroundScene {
     broodPool: createSpritePool(eggContainer, () => createEggSprite(3)),
     antPool: createSpritePool(antContainer, () => createAntSprite(false, 2.6)),
     queen,
-    staticKey: ""
+    staticKey: "",
+    earthGraphics,
+    gridGraphics
   };
 }
 
 function rebuildUndergroundStatic(scene: UndergroundScene, world: WorldSnapshot, staticKey: string): void {
-  scene.staticLayer.removeChildren();
-  drawUndergroundEarth(scene.staticLayer);
-  drawUndergroundGrid(scene.staticLayer, world);
+  scene.gridGraphics.clear();
+  drawUndergroundGrid(scene.gridGraphics, world);
   scene.staticKey = staticKey;
 }
 

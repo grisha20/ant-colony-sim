@@ -50,6 +50,8 @@ export type UndergroundScene = {
   antPool: SpritePool;
   queen: Sprite;
   staticKey: string;
+  earthGraphics: Graphics;
+  gridGraphics: Graphics;
 };
 
 export type RendererState = {
