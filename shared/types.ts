@@ -90,6 +90,8 @@ export type Ant = {
   digStandPos?: Vec2;
   digProgress?: number;
   carryingDebris?: "pebble" | "leaf" | null;
+  surfaceExitCooldown?: number;
+  undergroundExitCooldown?: number;
 };
 
 export type Queen = {

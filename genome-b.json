@@ -1,16 +1,17 @@
 {
   "current": {
-    "id": "genome-mqu9ifp3-d1pz1k",
+    "id": "genome-mqv1c9kb-r9wpar",
     "generation": 1,
     "genes": {
-      "nurseFraction": 0.4931376852909622,
-      "digFraction": 0.14126981736388655,
-      "queenRearBias": 0.665311715556774,
-      "forageSpread": 0.3775134985662151,
-      "spiderAttackStorage": 7.305823028020334,
-      "layReserve": 20.990076907158112,
-      "refuelThreshold": 421.5443921148311,
-      "spiderAvoid": 7.538274970816204
+      "nurseFraction": 0.529551569152286,
+      "digFraction": 0.17648855429796612,
+      "queenRearBias": 0.6136135413255788,
+      "forageSpread": 0.3501099585145772,
+      "spiderAttackStorage": 2.8451331062609024,
+      "layReserve": 21.96856647314849,
+      "refuelThreshold": 437.4114687003318,
+      "spiderAvoid": 7.302063074823392,
+      "aggression": 0.288815538274973
     }
   },
   "best": null,

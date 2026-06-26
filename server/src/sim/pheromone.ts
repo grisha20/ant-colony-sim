@@ -1,19 +1,29 @@
 import type { SparseGrid } from "../../../shared/types";
 
+type PheromoneValues = number[] | SparseGrid;
+
 export class PheromoneGrid {
   readonly width: number;
   readonly height: number;
   readonly values: Float32Array;
   private readonly scratch: Float32Array;
 
-  constructor(width: number, height: number, values?: number[]) {
+  constructor(width: number, height: number, values?: PheromoneValues) {
     this.width = width;
     this.height = height;
     this.values = new Float32Array(width * height);
     this.scratch = new Float32Array(width * height);
 
-    if (values) {
+    if (Array.isArray(values)) {
       this.values.set(values.slice(0, width * height));
+    } else if (values?.i && values?.v) {
+      const len = Math.min(values.i.length, values.v.length);
+      for (let index = 0; index < len; index += 1) {
+        const gridIndex = values.i[index];
+        if (gridIndex >= 0 && gridIndex < this.values.length) {
+          this.values[gridIndex] = values.v[index];
+        }
+      }
     }
   }
 

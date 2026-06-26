@@ -1,6 +1,8 @@
 import type { Brood, DigTask, Underground, UndergroundRoom, UndergroundTile, UndergroundTileType, Vec2 } from "../../../shared/types";
 import { CONFIG } from "../config";
 
+const MAX_STORAGE_ROOMS = 8;
+
 let nextBroodId = 1;
 
 function withJitter(pos: Vec2, radius = 3): Vec2 {
@@ -353,7 +355,12 @@ function roomsOfType(underground: Underground, roomType: UndergroundRoom["type"]
 }
 
 function totalRoomCapacity(underground: Underground, roomType: UndergroundRoom["type"]): number {
-  return roomsOfType(underground, roomType).reduce((total, room) => total + room.capacity, 0);
+  const rooms = roomsOfType(underground, roomType);
+  const capacity = rooms.reduce((total, room) => total + room.capacity, 0);
+  if (roomType === "storage" && rooms.length >= MAX_STORAGE_ROOMS) {
+    return Math.max(capacity, Math.ceil(underground.foodStorage) + CONFIG.plannedStorageCapacity);
+  }
+  return capacity;
 }
 
 function nextRoomId(underground: Underground, roomType: UndergroundRoom["type"]): string {
@@ -514,6 +521,12 @@ function makeEggRoomDigTask(underground: Underground): DigTask {
 
 function completeStorageRoom(underground: Underground, bounds?: { x: number; y: number; width: number; height: number }, id = "room-storage"): void {
   if (underground.rooms.some((room) => room.id === id)) {
+    return;
+  }
+
+  const storageRooms = roomsOfType(underground, "storage");
+  if (storageRooms.length >= MAX_STORAGE_ROOMS) {
+    storageRooms[storageRooms.length - 1].capacity += CONFIG.plannedStorageCapacity;
     return;
   }
 

@@ -323,7 +323,10 @@ export function moveSearchingDebris(world: World, ant: Ant): boolean {
   }
 
   if (minDebrisDist <= 1.2) {
-    world.surface.debris = world.surface.debris.filter(d => d.id !== nearestDebris!.id);
+    const index = world.surface.debris.findIndex((debris) => debris.id === nearestDebris!.id);
+    if (index >= 0) {
+      world.surface.debris.splice(index, 1);
+    }
     ant.carryingDebris = nearestDebris.type;
     ant.job = "idle";
     return true;

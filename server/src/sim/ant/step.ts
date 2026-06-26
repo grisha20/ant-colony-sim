@@ -95,8 +95,47 @@ export function guardQueen(world: World, ant: Ant): void {
   moveUndergroundToNode(world, ant, "queenChamber");
 }
 
+function isSurfaceExitThreatened(world: World): boolean {
+  const blockRadius = Math.max(
+    CONFIG.antSpiderSightRadius + CONFIG.entranceRadiusSurface + 3,
+    CONFIG.spiderLairWebRadius
+  );
+
+  for (const enemy of world.enemies) {
+    if (enemy.type !== "spider" || enemy.hp <= 0) {
+      continue;
+    }
+
+    if (distance(enemy.pos, world.surface.entrance) <= blockRadius) {
+      return true;
+    }
+    if (distance(enemy.lair, world.surface.entrance) <= CONFIG.spiderLairWebRadius + 3) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function shouldWaitForExitSlot(world: World, ant: Ant): boolean {
+  const maxConcurrentExits = 4;
+  const exiting = world.ants
+    .filter((other) => other.layer === "underground" && other.state === "toEntrance")
+    .sort((a, b) => numericAntId(a.id) - numericAntId(b.id));
+
+  if (exiting.length < maxConcurrentExits) {
+    return false;
+  }
+
+  return !exiting.slice(0, maxConcurrentExits).some((other) => other.id === ant.id);
+}
+
 export function stepUnderground(world: World, ant: Ant): void {
   maybeFeedUndergroundAnt(world, ant);
+
+  if ((ant.undergroundExitCooldown ?? 0) > 0) {
+    ant.undergroundExitCooldown = Math.max(0, (ant.undergroundExitCooldown ?? 0) - 1);
+  }
 
   if (!isDugPos(world, ant.pos)) {
     const nearest = findNearestDugTile(world, ant.pos);
@@ -143,6 +182,12 @@ export function stepUnderground(world: World, ant: Ant): void {
   }
 
   if (ant.state === "toEntrance") {
+    if (isSurfaceExitThreatened(world) || (ant.undergroundExitCooldown ?? 0) > 0 || shouldWaitForExitSlot(world, ant)) {
+      ant.state = "idle";
+      ant.job = "idle";
+      restUnderground(world, ant);
+      return;
+    }
     moveUndergroundToNode(world, ant, "entrance");
     tryCrossLayer(world, ant);
     return;
@@ -175,6 +220,11 @@ export function stepUnderground(world: World, ant: Ant): void {
     return;
   }
 
+  if (isSurfaceExitThreatened(world) || (ant.undergroundExitCooldown ?? 0) > 0 || shouldWaitForExitSlot(world, ant)) {
+    restUnderground(world, ant);
+    return;
+  }
+
   ant.state = "toEntrance";
   moveUndergroundToNode(world, ant, "entrance");
   tryCrossLayer(world, ant);
@@ -183,6 +233,10 @@ export function stepUnderground(world: World, ant: Ant): void {
 export function stepSurface(world: World, ant: Ant): void {
   if ((ant.state === "return" || ant.state === "carry" || ant.carrying > 0) && tryCrossLayer(world, ant)) {
     return;
+  }
+
+  if ((ant.surfaceExitCooldown ?? 0) > 0) {
+    ant.surfaceExitCooldown = Math.max(0, (ant.surfaceExitCooldown ?? 0) - 1);
   }
 
   if (handleEnemyColonyCombat(world, ant)) {
@@ -223,7 +277,7 @@ export function stepSurface(world: World, ant: Ant): void {
     return;
   }
 
-  if (ant.state === "return" || shouldReturnFromSurface(world, ant)) {
+  if (ant.state === "return" || ((ant.surfaceExitCooldown ?? 0) <= 0 && shouldReturnFromSurface(world, ant))) {
     moveHungryHome(world, ant);
     return;
   }

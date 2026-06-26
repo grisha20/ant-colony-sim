@@ -7,6 +7,8 @@ import type { World } from "../world";
 import { randomHeading } from "../world";
 import { distance, fanDirection, moveToward, normalize, posTile } from "./utils";
 
+const dugPathNextCache = new WeakMap<object, Map<number, Vec2>>();
+
 export function surfaceMoveSpeed(world: World, ant: Ant): number {
   let nearbyWorkers = 0;
   const list = tickCache.surfaceAnts;
@@ -131,6 +133,18 @@ export function findDugPathNext(world: World, from: Vec2, to: Vec2): Vec2 | null
   const w = world.underground.width;
   const h = world.underground.height;
   const size = w * h;
+  const startIndex = start.y * w + start.x;
+  const targetIndex = target.y * w + target.x;
+  const cacheKey = startIndex * size + targetIndex;
+  let cache = dugPathNextCache.get(world.underground);
+  if (!cache) {
+    cache = new Map<number, Vec2>();
+    dugPathNextCache.set(world.underground, cache);
+  }
+  const cached = cache.get(cacheKey);
+  if (cached && isDugTile(world.underground, cached.x, cached.y)) {
+    return cached;
+  }
 
   // Очередь индексов
   const queue = new Int32Array(size);
@@ -140,9 +154,6 @@ export function findDugPathNext(world: World, from: Vec2, to: Vec2): Vec2 | null
   // Храним индексы предков. Инициализируем -1
   const cameFrom = new Int32Array(size);
   cameFrom.fill(-1);
-
-  const startIndex = start.y * w + start.x;
-  const targetIndex = target.y * w + target.x;
 
   queue[tail++] = startIndex;
   cameFrom[startIndex] = -2; // Метка старта
@@ -192,10 +203,12 @@ export function findDugPathNext(world: World, from: Vec2, to: Vec2): Vec2 | null
     prev = cameFrom[curr];
   }
 
-  return {
+  const next = {
     x: curr % w,
     y: Math.floor(curr / w)
   };
+  cache.set(cacheKey, next);
+  return next;
 }
 
 export function moveUndergroundToward(world: World, ant: Ant, target: Vec2, speed: number = CONFIG.workerUndergroundSpeed): boolean {
@@ -310,11 +323,14 @@ export function applySeparation(world: World, ant: Ant, desired: Vec2): Vec2 {
 }
 
 export function tryCrossLayer(world: World, ant: Ant): boolean {
-  if (ant.layer === "underground" && distance(ant.pos, world.underground.entrance) <= CONFIG.entranceRadiusUnderground) {
+  const undergroundExitRadius = Math.max(CONFIG.entranceRadiusUnderground, 4.2);
+  if (ant.layer === "underground" && distance(ant.pos, world.underground.entrance) <= undergroundExitRadius) {
     ant.layer = "surface";
     ant.state = "search";
     ant.pos = { ...world.surface.entrance };
     ant.heading = fanDirection(randomHeading(), ant.id);
+    ant.surfaceExitCooldown = 12;
+    ant.undergroundExitCooldown = 0;
     const spawnOffset = CONFIG.entranceRadiusSurface + 0.8;
     ant.pos.x += ant.heading.x * spawnOffset;
     ant.pos.y += ant.heading.y * spawnOffset;
@@ -331,6 +347,8 @@ export function tryCrossLayer(world: World, ant: Ant): boolean {
     ant.state = ant.carrying > 0 ? "deposit" : "idle";
     ant.pos = { ...world.underground.entrance };
     ant.heading = { x: -1, y: 0 };
+    ant.surfaceExitCooldown = 0;
+    ant.undergroundExitCooldown = ant.carrying > 0 ? 0 : 80;
     return true;
   }
 

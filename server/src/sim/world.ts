@@ -43,6 +43,10 @@ export type World = Omit<WorldSnapshot, "pheromones" | "colonies"> & {
 let nextAntId = 1;
 let nextFoodSourceId = 0;
 let nextCarrionId = 0;
+const MAX_SURFACE_DEBRIS = 80;
+const MAX_SNAPSHOT_STORAGE_ROOMS = 8;
+const MAX_SURFACE_FOOD_SOURCES = 40;
+const FOOD_MERGE_RADIUS = 4;
 
 function randomSurfacePosAwayFromNest(minNestDistance: number): { x: number; y: number } {
   for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -135,6 +139,105 @@ function makeDebrisSources(entrances: Vec2[]): Debris[] {
   return debris;
 }
 
+function normalizeSurfaceDebris(surface: Surface, entrances: Vec2[]): Debris[] {
+  const debris = surface.debris ?? makeDebrisSources(entrances);
+  if (debris.length <= MAX_SURFACE_DEBRIS) {
+    return debris;
+  }
+
+  const kept = new Map<string, Debris>();
+  for (const item of debris) {
+    let nearestEntranceDistance = Number.POSITIVE_INFINITY;
+    for (const entrance of entrances) {
+      nearestEntranceDistance = Math.min(
+        nearestEntranceDistance,
+        Math.hypot(item.pos.x - entrance.x, item.pos.y - entrance.y)
+      );
+    }
+
+    const bucket = `${Math.floor(item.pos.x / 8)}:${Math.floor(item.pos.y / 8)}:${item.type}`;
+    if (nearestEntranceDistance >= 3 && nearestEntranceDistance <= 24 && !kept.has(bucket)) {
+      kept.set(bucket, item);
+    }
+
+    if (kept.size >= MAX_SURFACE_DEBRIS) {
+      break;
+    }
+  }
+
+  if (kept.size < MAX_SURFACE_DEBRIS) {
+    for (const item of debris) {
+      kept.set(item.id, item);
+      if (kept.size >= MAX_SURFACE_DEBRIS) {
+        break;
+      }
+    }
+  }
+
+  console.warn(`Trimmed surface debris from ${debris.length} to ${kept.size} while loading snapshot`);
+  return Array.from(kept.values());
+}
+
+function mergeFoodSources(sources: FoodSource[]): FoodSource[] {
+  const merged: FoodSource[] = [];
+  for (const source of sources) {
+    if (source.amount <= 0) {
+      continue;
+    }
+
+    let target: FoodSource | null = null;
+    for (const existing of merged) {
+      if (Math.hypot(existing.pos.x - source.pos.x, existing.pos.y - source.pos.y) <= FOOD_MERGE_RADIUS) {
+        target = existing;
+        break;
+      }
+    }
+
+    if (target) {
+      const total = target.amount + source.amount;
+      target.pos = {
+        x: (target.pos.x * target.amount + source.pos.x * source.amount) / total,
+        y: (target.pos.y * target.amount + source.pos.y * source.amount) / total
+      };
+      target.amount = total;
+    } else {
+      merged.push({ ...source, pos: { ...source.pos } });
+    }
+  }
+
+  return merged
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, MAX_SURFACE_FOOD_SOURCES);
+}
+
+function compactStorageRooms(underground: Underground): void {
+  const storageRooms = underground.rooms.filter((room) => room.type === "storage");
+  if (storageRooms.length <= MAX_SNAPSHOT_STORAGE_ROOMS) {
+    return;
+  }
+
+  const totalCapacity = Math.max(
+    Math.ceil(underground.foodStorage),
+    storageRooms.reduce((total, room) => total + room.capacity, 0)
+  );
+  const keptStorage = storageRooms.slice(0, MAX_SNAPSHOT_STORAGE_ROOMS).map((room, index) => ({
+    ...room,
+    capacity:
+      Math.floor(totalCapacity / MAX_SNAPSHOT_STORAGE_ROOMS) +
+      (index < totalCapacity % MAX_SNAPSHOT_STORAGE_ROOMS ? 1 : 0),
+    used: 0
+  }));
+
+  underground.rooms = [
+    ...underground.rooms.filter((room) => room.type !== "storage"),
+    ...keptStorage
+  ];
+  underground.digTasks = underground.digTasks.filter(
+    (task) => task.roomType !== "storage" || task.status !== "done"
+  );
+  console.warn(`Compacted storage rooms from ${storageRooms.length} to ${keptStorage.length} while loading snapshot`);
+}
+
 export function respawnDebris(world: World): void {
   if (!world.surface.debris) {
     world.surface.debris = [];
@@ -205,7 +308,7 @@ export function addAntCorpse(world: World, ant: Ant): FoodSource {
 }
 
 export function growFoodSources(world: World): void {
-  world.surface.foodSources = world.surface.foodSources.filter((source) => source.amount > 0);
+  world.surface.foodSources = mergeFoodSources(world.surface.foodSources);
   if (CONFIG.foodGrowEveryTicks <= 0 || world.tick % CONFIG.foodGrowEveryTicks !== 0) {
     return;
   }
@@ -222,12 +325,25 @@ export function growFoodSources(world: World): void {
 }
 
 export function addFoodSource(world: World, x: number, y: number, amount: number): FoodSource {
+  const pos = {
+    x: Math.max(1.5, Math.min(world.surface.width - 1.5, x)),
+    y: Math.max(1.5, Math.min(world.surface.height - 1.5, y))
+  };
+  for (const existing of world.surface.foodSources) {
+    if (existing.amount > 0 && Math.hypot(existing.pos.x - pos.x, existing.pos.y - pos.y) <= FOOD_MERGE_RADIUS) {
+      const total = existing.amount + amount;
+      existing.pos = {
+        x: (existing.pos.x * existing.amount + pos.x * amount) / total,
+        y: (existing.pos.y * existing.amount + pos.y * amount) / total
+      };
+      existing.amount = total;
+      return existing;
+    }
+  }
+
   const source: FoodSource = {
     id: `food-${nextFoodSourceId}`,
-    pos: {
-      x: Math.max(1.5, Math.min(world.surface.width - 1.5, x)),
-      y: Math.max(1.5, Math.min(world.surface.height - 1.5, y))
-    },
+    pos,
     amount
   };
   nextFoodSourceId += 1;
@@ -451,6 +567,7 @@ export function worldFromSnapshot(
     return Number.isFinite(numeric) ? Math.max(max, numeric) : max;
   }, 0);
   nextFoodSourceId = Math.max(nextFoodSourceId, maxFoodId + 1);
+  const foodSources = mergeFoodSources(snapshot.surface.foodSources);
   const carrion = snapshot.surface.carrion ?? makeCarrionSources();
   const maxCarrionId = carrion.reduce((max, source) => {
     const numeric = Number(source.id.replace("carrion-", ""));
@@ -490,14 +607,17 @@ export function worldFromSnapshot(
   });
   const enemies = normalizeEnemies(snapshot);
   syncEnemyIdCounter(enemies, snapshot.tick);
+  const entrances = snapshot.surface.entrances ?? colonies.map((colony) => colony.surfaceEntrance);
+  const debris = normalizeSurfaceDebris(snapshot.surface, entrances);
 
   const world: World = {
     ...snapshot,
     surface: {
       ...snapshot.surface,
+      foodSources,
       carrion,
-      entrances: snapshot.surface.entrances ?? colonies.map((colony) => colony.surfaceEntrance),
-      debris: snapshot.surface.debris ?? makeDebrisSources(snapshot.surface.entrances ?? colonies.map((colony) => colony.surfaceEntrance))
+      entrances,
+      debris
     },
     colony: colonies[0].colony,
     underground: colonies[0].underground,
@@ -594,6 +714,7 @@ function normalizeUndergroundSnapshot(
     carrion: underground.carrion ?? []
   });
 
+  compactStorageRooms(normalized);
   return normalized;
 }
 
