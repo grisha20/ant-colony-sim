@@ -7,7 +7,20 @@ import type { World } from "../world";
 import { randomHeading } from "../world";
 import { distance, fanDirection, moveToward, normalize, posTile } from "./utils";
 
-const dugPathNextCache = new WeakMap<object, Map<number, Vec2>>();
+export type CachedPath = {
+  targetTile: Vec2;
+  tiles: Vec2[];
+};
+
+export const antPaths = new Map<string, CachedPath>();
+
+export function clearDeadAntPaths(activeIds: Set<string>): void {
+  for (const antId of antPaths.keys()) {
+    if (!activeIds.has(antId)) {
+      antPaths.delete(antId);
+    }
+  }
+}
 
 export function surfaceMoveSpeed(world: World, ant: Ant): number {
   let nearbyWorkers = 0;
@@ -117,17 +130,19 @@ export function findNearestDugTile(world: World, from: Vec2): Vec2 | null {
   return null;
 }
 
-export function findDugPathNext(world: World, from: Vec2, to: Vec2): Vec2 | null {
+export function calculateDugPath(world: World, from: Vec2, to: Vec2): Vec2[] | null {
   const start = posTile(from);
   const target = posTile(to);
   if (!isDugTile(world.underground, target.x, target.y)) {
     return null;
   }
   if (!isDugTile(world.underground, start.x, start.y)) {
-    return findNearestDugTile(world, from);
+    const fallback = findNearestDugTile(world, from);
+    if (!fallback) return null;
+    return [fallback];
   }
   if (start.x === target.x && start.y === target.y) {
-    return target;
+    return [target];
   }
 
   const w = world.underground.width;
@@ -135,16 +150,6 @@ export function findDugPathNext(world: World, from: Vec2, to: Vec2): Vec2 | null
   const size = w * h;
   const startIndex = start.y * w + start.x;
   const targetIndex = target.y * w + target.x;
-  const cacheKey = startIndex * size + targetIndex;
-  let cache = dugPathNextCache.get(world.underground);
-  if (!cache) {
-    cache = new Map<number, Vec2>();
-    dugPathNextCache.set(world.underground, cache);
-  }
-  const cached = cache.get(cacheKey);
-  if (cached && isDugTile(world.underground, cached.x, cached.y)) {
-    return cached;
-  }
 
   // Очередь индексов
   const queue = new Int32Array(size);
@@ -195,37 +200,72 @@ export function findDugPathNext(world: World, from: Vec2, to: Vec2): Vec2 | null
     return null;
   }
 
-  // Восстанавливаем путь назад до первого шага от старта
+  // Восстанавливаем полный путь от конца к началу
+  const path: Vec2[] = [];
   let curr = targetIndex;
-  let prev = cameFrom[curr];
-  while (prev !== -2 && prev !== startIndex && prev !== -1) {
-    curr = prev;
-    prev = cameFrom[curr];
+  while (curr !== startIndex && curr !== -2 && curr !== -1) {
+    path.push({
+      x: curr % w,
+      y: Math.floor(curr / w)
+    });
+    curr = cameFrom[curr];
   }
-
-  const next = {
-    x: curr % w,
-    y: Math.floor(curr / w)
-  };
-  cache.set(cacheKey, next);
-  return next;
+  path.reverse();
+  return path;
 }
 
 export function moveUndergroundToward(world: World, ant: Ant, target: Vec2, speed: number = CONFIG.workerUndergroundSpeed): boolean {
-  const nextTile = findDugPathNext(world, ant.pos, target);
-  if (!nextTile) {
-    const fallback = findNearestDugTile(world, ant.pos);
-    if (fallback) {
-      ant.pos = tileCenter(fallback);
-      clampToUnderground(ant, world);
+  const startTile = posTile(ant.pos);
+  const targetTile = posTile(target);
+
+  let cached = antPaths.get(ant.id);
+
+  // Пересчитываем путь, если кэша нет, цель изменилась, или первая плитка пути стала недоступна
+  const needRecalc =
+    !cached ||
+    cached.targetTile.x !== targetTile.x ||
+    cached.targetTile.y !== targetTile.y ||
+    cached.tiles.length === 0 ||
+    !isDugTile(world.underground, cached.tiles[0].x, cached.tiles[0].y);
+
+  if (needRecalc) {
+    const path = calculateDugPath(world, ant.pos, target);
+    if (path && path.length > 0) {
+      cached = {
+        targetTile,
+        tiles: path
+      };
+      antPaths.set(ant.id, cached);
+    } else {
+      cached = null;
+      antPaths.delete(ant.id);
     }
-    return false;
   }
 
-  const nextTarget = nextTile.x === posTile(target).x && nextTile.y === posTile(target).y ? target : tileCenter(nextTile);
-  moveToward(ant, nextTarget, Math.min(speed, Math.max(0.15, distance(ant.pos, nextTarget))));
-  clampToUnderground(ant, world);
-  return isDugPos(world, ant.pos);
+  if (cached && cached.tiles.length > 0) {
+    const nextTile = cached.tiles[0];
+    const distToNext = distance(ant.pos, tileCenter(nextTile));
+
+    // Если муравей подошел к следующей плитке достаточно близко, переходим к следующей
+    if (distToNext <= 1.2) {
+      cached.tiles.shift();
+    }
+
+    if (cached.tiles.length > 0) {
+      const nextTarget = cached.tiles[0];
+      const nextTargetPos = nextTarget.x === targetTile.x && nextTarget.y === targetTile.y ? target : tileCenter(nextTarget);
+      moveToward(ant, nextTargetPos, Math.min(speed, Math.max(0.15, distance(ant.pos, nextTargetPos))));
+      clampToUnderground(ant, world);
+      return isDugPos(world, ant.pos);
+    }
+  }
+
+  const fallback = findNearestDugTile(world, ant.pos);
+  if (fallback) {
+    ant.pos = tileCenter(fallback);
+    clampToUnderground(ant, world);
+  }
+  return false;
 }
 
 export function moveUndergroundToNode(world: World, ant: Ant, destination: UndergroundNode): boolean {

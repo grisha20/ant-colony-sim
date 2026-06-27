@@ -1,2 +1,2 @@
 export { stepAnt } from "./step";
-export { tryCrossLayer } from "./movement";
+export { tryCrossLayer, clearDeadAntPaths } from "./movement";

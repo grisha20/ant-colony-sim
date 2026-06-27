@@ -362,7 +362,7 @@ const colonyStatNodes = colonyNodes.map((nodes) => ({
 const SURFACE_TILE_SIZE = 8;
 const MIN_ZOOM = 0.45;
 const MAX_ZOOM = 2.5;
-const PACKET_INTERVAL = 100;
+let packetInterval = 100;
 
 type CameraMode = "follow" | "free";
 type AntInterp = {
@@ -553,7 +553,7 @@ pixi.ticker.add(() => {
     return;
   }
 
-  const interpT = lastPacketTime > 0 ? Math.min((now - lastPacketTime) / PACKET_INTERVAL, 1) : 1;
+  const interpT = lastPacketTime > 0 ? Math.min((now - lastPacketTime) / packetInterval, 1) : 1;
   draw(interpT);
   lastRenderAt = now;
 });
@@ -680,6 +680,15 @@ function unpackSparseGrid(sparse: any, size: number): Float32Array {
 }
 
 socket.addEventListener("message", (event) => {
+  const now = performance.now();
+  if (lastPacketTime > 0) {
+    const diff = now - lastPacketTime;
+    if (diff > 5 && diff < 300) {
+      packetInterval = packetInterval * 0.8 + diff * 0.2;
+    }
+  }
+  lastPacketTime = now;
+
   const snap = JSON.parse(String(event.data)) as WorldSnapshot;
 
   const hasNewPheromones = snap.pheromones && snap.pheromones.food && snap.pheromones.food.i && snap.pheromones.food.i.length > 0;
@@ -727,7 +736,6 @@ socket.addEventListener("message", (event) => {
   }
 
   latestWorld = snap;
-  lastPacketTime = performance.now();
   if (camera.x === 50 && camera.y === 50) {
     centerOnNest(snap);
   }

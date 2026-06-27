@@ -1,7 +1,7 @@
 import { computeDirectives, createFitnessState, updateFitness } from "../ai/controller";
 import { recordAndEvolve, saveGenome } from "../ai/genome";
 import { CONFIG } from "../config";
-import { stepAnt } from "./ant";
+import { stepAnt, clearDeadAntPaths } from "./ant";
 import { updateTickCache } from "./cache";
 import { profiler } from "../utils/profiler";
 import { updateBrood, updateQueen } from "./brood";
@@ -183,5 +183,10 @@ export function step(world: World): void {
       world.pheromones.food.evaporateAndDiffuse(evap4, diff4);
     });
   }
+  if (world.tick % 500 === 0) {
+    const activeIds = new Set(world.ants.map((a) => a.id));
+    clearDeadAntPaths(activeIds);
+  }
+
   syncWorldLegacyFields(world);
 }
