@@ -10,6 +10,7 @@ import { distance, fanDirection, moveToward, normalize, posTile } from "./utils"
 export type CachedPath = {
   targetTile: Vec2;
   tiles: Vec2[];
+  failed?: boolean;
 };
 
 export const antPaths = new Map<string, CachedPath>();
@@ -228,13 +229,13 @@ export function moveUndergroundToward(world: World, ant: Ant, target: Vec2, spee
 
   let cached = antPaths.get(ant.id);
 
-  // Пересчитываем путь, если кэша нет, цель изменилась, или первая плитка пути стала недоступна
+  // Пересчитываем путь, если кэша нет, цель изменилась, или первая плитка пути стала недоступна.
+  // Но если путь помечен как failed и цель та же, мы его НЕ пересчитываем!
   const needRecalc =
     !cached ||
     cached.targetTile.x !== targetTile.x ||
     cached.targetTile.y !== targetTile.y ||
-    cached.tiles.length === 0 ||
-    !isDugTile(world.underground, cached.tiles[0].x, cached.tiles[0].y);
+    (!cached.failed && (cached.tiles.length === 0 || !isDugTile(world.underground, cached.tiles[0].x, cached.tiles[0].y)));
 
   if (needRecalc) {
     const path = calculateDugPath(world, ant.pos, target);
@@ -245,9 +246,24 @@ export function moveUndergroundToward(world: World, ant: Ant, target: Vec2, spee
       };
       antPaths.set(ant.id, cached);
     } else {
-      cached = null;
-      antPaths.delete(ant.id);
+      // Кэшируем неудачу, чтобы не вызывать BFS каждый тик к той же недостижимой цели
+      cached = {
+        targetTile,
+        tiles: [],
+        failed: true
+      };
+      antPaths.set(ant.id, cached);
     }
+  }
+
+  // Если путь не найден, просто стоим или делаем fallback
+  if (cached && cached.failed) {
+    const fallback = findNearestDugTile(world, ant.pos);
+    if (fallback) {
+      ant.pos = tileCenter(fallback);
+      clampToUnderground(ant, world);
+    }
+    return false;
   }
 
   if (cached && cached.tiles.length > 0) {
