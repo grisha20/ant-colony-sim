@@ -30,10 +30,20 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function surfaceFoodValue(source: { amount: number; kind?: string }): number {
+  if (source.kind === "antCorpse") {
+    return source.amount * 0.15;
+  }
+  if (source.kind === "carrion") {
+    return source.amount * 0.35;
+  }
+  return source.amount;
+}
+
 export function computeDirectives(world: World, genome: Genome): ColonyDirectives {
   const workerCount = Math.max(1, world.ants.length);
   const fullStoragePressure = world.underground.foodStorage >= CONFIG.queenMinFoodReserve * 2 ? 0.85 : 1;
-  const surfaceFood = [...world.surface.foodSources, ...world.surface.carrion].reduce((total, source) => total + Math.max(0, source.amount), 0);
+  const surfaceFood = [...world.surface.foodSources, ...world.surface.carrion].reduce((total, source) => total + Math.max(0, surfaceFoodValue(source)), 0);
   const hasSurfaceFood = surfaceFood > 0;
   const hasBrood = world.underground.brood.length > 0;
   const nearestSpiderDistance = world.enemies.reduce((nearest, enemy) => {

@@ -370,7 +370,7 @@ export function updateEnemies(world: World): void {
     const starved = updateSpiderStarvation(enemy);
     if (enemy.hp <= 0) {
       deadEnemies.add(enemy.id);
-      addFoodSource(world, enemy.pos.x, enemy.pos.y, CONFIG.spiderCarcassFood);
+      addFoodSource(world, enemy.pos.x, enemy.pos.y, CONFIG.spiderCarcassFood, "spiderCarcass");
       creditSpiderKill(world, enemy);
       evolveSpiderGeneration(world);
       spiderRespawnTick = world.tick + CONFIG.spiderRespawnTicks;

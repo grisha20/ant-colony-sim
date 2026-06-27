@@ -156,6 +156,8 @@ export type FoodSource = {
   id: string;
   pos: Vec2;
   amount: number;
+  kind?: "food" | "carrion" | "antCorpse" | "spiderCarcass";
+  createdAt?: number;
 };
 
 export type Enemy = {

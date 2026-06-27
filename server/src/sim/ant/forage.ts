@@ -21,10 +21,24 @@ import {
 import { hasDugRoom } from "./brood";
 
 export type SurfaceFoodTarget = {
-  source: { pos: Vec2; amount: number };
-  list: Array<{ pos: Vec2; amount: number }>;
+  source: { pos: Vec2; amount: number; kind?: "food" | "carrion" | "antCorpse" | "spiderCarcass" };
+  list: Array<{ pos: Vec2; amount: number; kind?: "food" | "carrion" | "antCorpse" | "spiderCarcass" }>;
   index: number;
 };
+
+function foodPriority(source: SurfaceFoodTarget["source"], starving: boolean): number {
+  const kind = source.kind ?? "food";
+  if (kind === "spiderCarcass") {
+    return 1.2;
+  }
+  if (kind === "food") {
+    return 1;
+  }
+  if (kind === "carrion") {
+    return starving ? 0.72 : 0.38;
+  }
+  return starving ? 0.55 : 0.18;
+}
 
 export function scoutDirection(world: World, ant: Ant): Vec2 {
   const seed = numericAntId(ant.id) + (ant.colonyId === "colony-2" ? 19 : 0);
@@ -40,7 +54,8 @@ export function scoutDirection(world: World, ant: Ant): Vec2 {
 
 export function nearestAvailableFood(world: World, ant: Ant): SurfaceFoodTarget | null {
   let nearest: SurfaceFoodTarget | null = null;
-  let nearestDistance = Number.POSITIVE_INFINITY;
+  let nearestScore = Number.POSITIVE_INFINITY;
+  const starving = isColonyStarving(world);
 
   for (const list of [world.surface.foodSources, world.surface.carrion]) {
     list.forEach((source, index) => {
@@ -49,8 +64,9 @@ export function nearestAvailableFood(world: World, ant: Ant): SurfaceFoodTarget 
       }
 
       const sourceDistance = distance(ant.pos, source.pos);
-      if (sourceDistance < nearestDistance) {
-        nearestDistance = sourceDistance;
+      const score = sourceDistance / Math.max(0.05, foodPriority(source, starving));
+      if (score < nearestScore) {
+        nearestScore = score;
         nearest = { source, list, index };
       }
     });
@@ -118,7 +134,7 @@ export function moveSearching(world: World, ant: Ant): void {
     return;
   }
 
-  const isSuper = food && food.source.amount >= CONFIG.superFoodAmountThreshold;
+  const isSuper = food && food.source.kind === "spiderCarcass";
   const approachRange = isSuper ? CONFIG.superFoodDirectApproachRange : CONFIG.foodDirectApproachRange;
 
   if (food && distance(ant.pos, food.source.pos) <= approachRange) {

@@ -7,8 +7,18 @@ export function queenGuardIds(world: World): Set<string> {
   return tickCache.queenGuardIds;
 }
 
+function surfaceFoodValue(source: { amount: number; kind?: string }): number {
+  if (source.kind === "antCorpse") {
+    return source.amount * 0.15;
+  }
+  if (source.kind === "carrion") {
+    return source.amount * 0.35;
+  }
+  return source.amount;
+}
+
 export function surfaceFoodTotal(world: World): number {
-  return [...world.surface.foodSources, ...world.surface.carrion].reduce((total, source) => total + Math.max(0, source.amount), 0);
+  return [...world.surface.foodSources, ...world.surface.carrion].reduce((total, source) => total + Math.max(0, surfaceFoodValue(source)), 0);
 }
 
 export function isColonyStarving(world: World): boolean {

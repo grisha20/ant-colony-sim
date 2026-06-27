@@ -106,14 +106,12 @@ export function nearestSuperFood(world: World, pos: Vec2): { pos: Vec2; amount: 
   let nearest: { pos: Vec2; amount: number } | null = null;
   let nearestDistance = Number.POSITIVE_INFINITY;
 
-  for (const list of [world.surface.foodSources, world.surface.carrion]) {
-    for (const source of list) {
-      if (source.amount >= CONFIG.superFoodAmountThreshold) {
-        const dist = distance(pos, source.pos);
-        if (dist < nearestDistance) {
-          nearestDistance = dist;
-          nearest = source;
-        }
+  for (const source of world.surface.foodSources) {
+    if (source.kind === "spiderCarcass" && source.amount > 0) {
+      const dist = distance(pos, source.pos);
+      if (dist < nearestDistance) {
+        nearestDistance = dist;
+        nearest = source;
       }
     }
   }
@@ -137,13 +135,48 @@ export function dropCarriedFood(world: World, ant: Ant): void {
   }
 }
 
+function retreatFromEnemyAnt(world: World, ant: Ant, enemyPos: Vec2): void {
+  if (ant.carrying > 0) {
+    ant.state = "carry";
+    moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world), false);
+    return;
+  }
+
+  const speed = surfaceMoveSpeed(world, ant);
+  const away = normalize({ x: ant.pos.x - enemyPos.x, y: ant.pos.y - enemyPos.y });
+  const home = normalize({ x: world.surface.entrance.x - ant.pos.x, y: world.surface.entrance.y - ant.pos.y });
+  const desired = applySeparation(
+    world,
+    ant,
+    normalize({ x: away.x * 1.7 + home.x * 0.45, y: away.y * 1.7 + home.y * 0.45 })
+  );
+
+  ant.state = "search";
+  ant.heading = desired;
+  ant.pos.x += desired.x * speed;
+  ant.pos.y += desired.y * speed;
+  clampToSurface(ant, world);
+}
+
 export function handleEnemyColonyCombat(world: World, ant: Ant): boolean {
   if (ant.layer !== "surface") {
     return false;
   }
 
   const nearest = nearestEnemyAnt(world, ant);
+  const superFood = nearestSuperFood(world, ant.pos);
+  const nearSuperFood = !!superFood && distance(ant.pos, superFood.pos) <= CONFIG.superFoodCombatRadius;
+
   if (nearest && nearest.distance <= CONFIG.antCombatRadius) {
+    const wantsFight =
+      isColonyWarHungry(world) ||
+      world.directives.aggression >= 0.55 ||
+      (nearSuperFood && world.directives.aggression >= 0.35);
+    if (!wantsFight || ant.carrying > 0) {
+      retreatFromEnemyAnt(world, ant, nearest.ant.pos);
+      return true;
+    }
+
     dropCarriedFood(world, ant);
     ant.state = "fight";
     ant.heading = normalize({ x: nearest.ant.pos.x - ant.pos.x, y: nearest.ant.pos.y - ant.pos.y });
@@ -159,11 +192,10 @@ export function handleEnemyColonyCombat(world: World, ant: Ant): boolean {
   }
 
   // Проверяем борьбу за супер-ресурсы в зависимости от агрессии
-  const superFood = nearestSuperFood(world, ant.pos);
-  if (superFood && distance(ant.pos, superFood.pos) <= CONFIG.superFoodCombatRadius) {
+  if (nearSuperFood && superFood) {
     if (nearest && distance(nearest.ant.pos, superFood.pos) <= CONFIG.superFoodCombatRadius) {
       const chaseRadius = CONFIG.antCombatRadius + (CONFIG.superFoodCombatRadius - CONFIG.antCombatRadius) * world.directives.aggression;
-      if (nearest.distance <= chaseRadius) {
+      if (nearest.distance <= chaseRadius && ant.carrying <= 0) {
         dropCarriedFood(world, ant);
         ant.state = "fight";
         moveSurfaceToward(world, ant, nearest.ant.pos, false);

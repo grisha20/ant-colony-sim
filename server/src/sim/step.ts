@@ -45,12 +45,19 @@ function scentFoodSources(world: World): void {
 
   for (const source of [...world.surface.foodSources, ...world.surface.carrion]) {
     if (source.amount > 0) {
+      const kind = source.kind ?? (source.id.startsWith("carrion-") ? "carrion" : "food");
+      const scentMultiplier =
+        kind === "antCorpse"
+          ? CONFIG.antCorpseScentMultiplier
+          : kind === "carrion"
+            ? CONFIG.carrionScentMultiplier
+            : 1;
       const sx = Math.floor(source.pos.x);
       const sy = Math.floor(source.pos.y);
       const len = offsets.length;
       for (let i = 0; i < len; i += 1) {
         const offset = offsets[i];
-        world.pheromones.food.add(sx + offset.dx, sy + offset.dy, CONFIG.foodSourceScent * offset.falloff * 5);
+        world.pheromones.food.add(sx + offset.dx, sy + offset.dy, CONFIG.foodSourceScent * offset.falloff * 5 * scentMultiplier);
       }
     }
   }

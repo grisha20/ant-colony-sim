@@ -47,6 +47,7 @@ const MAX_SURFACE_DEBRIS = 80;
 const MAX_SNAPSHOT_STORAGE_ROOMS = 8;
 const MAX_SURFACE_FOOD_SOURCES = 40;
 const FOOD_MERGE_RADIUS = 4;
+const LEGACY_ANT_CORPSE_AMOUNT = 16;
 
 function randomSurfacePosAwayFromNest(minNestDistance: number): { x: number; y: number } {
   for (let attempt = 0; attempt < 80; attempt += 1) {
@@ -76,7 +77,8 @@ function makeFoodSources(): FoodSource[] {
     sources.push({
       id: `food-${nextFoodSourceId}`,
       pos,
-      amount: 40 + Math.random() * 40
+      amount: 40 + Math.random() * 40,
+      kind: "food"
     });
     nextFoodSourceId += 1;
   }
@@ -89,7 +91,8 @@ function makeCarrionSource(): FoodSource {
   const source: FoodSource = {
     id: `carrion-${nextCarrionId}`,
     pos: randomSurfacePosAwayFromNest(minNestDistance),
-    amount: CONFIG.carrionAmount * (0.75 + Math.random() * 0.5)
+    amount: CONFIG.carrionAmount * (0.75 + Math.random() * 0.5),
+    kind: "carrion"
   };
   nextCarrionId += 1;
   return source;
@@ -187,7 +190,10 @@ function mergeFoodSources(sources: FoodSource[]): FoodSource[] {
 
     let target: FoodSource | null = null;
     for (const existing of merged) {
-      if (Math.hypot(existing.pos.x - source.pos.x, existing.pos.y - source.pos.y) <= FOOD_MERGE_RADIUS) {
+      if (
+        (existing.kind ?? "food") === (source.kind ?? "food") &&
+        Math.hypot(existing.pos.x - source.pos.x, existing.pos.y - source.pos.y) <= FOOD_MERGE_RADIUS
+      ) {
         target = existing;
         break;
       }
@@ -208,6 +214,32 @@ function mergeFoodSources(sources: FoodSource[]): FoodSource[] {
   return merged
     .sort((a, b) => b.amount - a.amount)
     .slice(0, MAX_SURFACE_FOOD_SOURCES);
+}
+
+function normalizeFoodKind(source: FoodSource, fallback: NonNullable<FoodSource["kind"]>): FoodSource {
+  return {
+    ...source,
+    kind: source.kind ?? fallback
+  };
+}
+
+function normalizeCarrionKind(source: FoodSource): FoodSource {
+  if (source.kind) {
+    return source;
+  }
+
+  if (source.amount <= LEGACY_ANT_CORPSE_AMOUNT) {
+    return {
+      ...source,
+      amount: Math.min(source.amount, CONFIG.antCorpseFood),
+      kind: "antCorpse"
+    };
+  }
+
+  return {
+    ...source,
+    kind: "carrion"
+  };
 }
 
 function compactStorageRooms(underground: Underground): void {
@@ -283,6 +315,20 @@ export function respawnDebris(world: World): void {
 
 export function respawnCarrion(world: World): void {
   world.surface.carrion = world.surface.carrion.filter((source) => source.amount > 0);
+  if (CONFIG.carrionDecayEveryTicks > 0 && world.tick > 0 && world.tick % CONFIG.carrionDecayEveryTicks === 0) {
+    for (const source of world.surface.carrion) {
+      if (source.kind === "antCorpse" || source.kind === "carrion") {
+        source.amount = Math.max(0, source.amount * (1 - CONFIG.carrionDecayFraction));
+      }
+    }
+    for (const colony of world.colonies) {
+      for (const source of colony.underground.carrion) {
+        if (source.kind === "antCorpse" || source.kind === "carrion") {
+          source.amount = Math.max(0, source.amount * (1 - CONFIG.carrionDecayFraction));
+        }
+      }
+    }
+  }
   if (CONFIG.carrionRespawnEveryTicks <= 0 || world.tick % CONFIG.carrionRespawnEveryTicks !== 0) {
     return;
   }
@@ -296,7 +342,9 @@ export function addAntCorpse(world: World, ant: Ant): FoodSource {
   const source: FoodSource = {
     id: `carrion-${nextCarrionId}`,
     pos: { ...ant.pos },
-    amount: CONFIG.antCorpseFood * Math.max(0.35, ant.strength ?? 1)
+    amount: CONFIG.antCorpseFood * Math.max(0.35, ant.strength ?? 1),
+    kind: "antCorpse",
+    createdAt: world.tick
   };
   nextCarrionId += 1;
   if (ant.layer === "underground") {
@@ -324,13 +372,23 @@ export function growFoodSources(world: World): void {
   }
 }
 
-export function addFoodSource(world: World, x: number, y: number, amount: number): FoodSource {
+export function addFoodSource(
+  world: World,
+  x: number,
+  y: number,
+  amount: number,
+  kind: FoodSource["kind"] = "food"
+): FoodSource {
   const pos = {
     x: Math.max(1.5, Math.min(world.surface.width - 1.5, x)),
     y: Math.max(1.5, Math.min(world.surface.height - 1.5, y))
   };
   for (const existing of world.surface.foodSources) {
-    if (existing.amount > 0 && Math.hypot(existing.pos.x - pos.x, existing.pos.y - pos.y) <= FOOD_MERGE_RADIUS) {
+    if (
+      existing.amount > 0 &&
+      (existing.kind ?? "food") === kind &&
+      Math.hypot(existing.pos.x - pos.x, existing.pos.y - pos.y) <= FOOD_MERGE_RADIUS
+    ) {
       const total = existing.amount + amount;
       existing.pos = {
         x: (existing.pos.x * existing.amount + pos.x * amount) / total,
@@ -344,7 +402,9 @@ export function addFoodSource(world: World, x: number, y: number, amount: number
   const source: FoodSource = {
     id: `food-${nextFoodSourceId}`,
     pos,
-    amount
+    amount,
+    kind,
+    createdAt: world.tick
   };
   nextFoodSourceId += 1;
   world.surface.foodSources.push(source);
@@ -567,8 +627,8 @@ export function worldFromSnapshot(
     return Number.isFinite(numeric) ? Math.max(max, numeric) : max;
   }, 0);
   nextFoodSourceId = Math.max(nextFoodSourceId, maxFoodId + 1);
-  const foodSources = mergeFoodSources(snapshot.surface.foodSources);
-  const carrion = snapshot.surface.carrion ?? makeCarrionSources();
+  const foodSources = mergeFoodSources(snapshot.surface.foodSources.map((source) => normalizeFoodKind(source, "food")));
+  const carrion = (snapshot.surface.carrion ?? makeCarrionSources()).map((source) => normalizeCarrionKind(source));
   const maxCarrionId = carrion.reduce((max, source) => {
     const numeric = Number(source.id.replace("carrion-", ""));
     return Number.isFinite(numeric) ? Math.max(max, numeric) : max;
@@ -711,7 +771,7 @@ function normalizeUndergroundSnapshot(
     barracksA: underground.barracksA ?? CONFIG.barracksAPos,
     barracksB: underground.barracksB ?? CONFIG.barracksBPos,
     princesses: underground.princesses ?? [],
-    carrion: underground.carrion ?? []
+    carrion: (underground.carrion ?? []).map((source) => normalizeCarrionKind(source))
   });
 
   compactStorageRooms(normalized);
