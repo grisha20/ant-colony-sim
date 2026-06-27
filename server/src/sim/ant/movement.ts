@@ -218,6 +218,14 @@ export function moveUndergroundToward(world: World, ant: Ant, target: Vec2, spee
   const startTile = posTile(ant.pos);
   const targetTile = posTile(target);
 
+  // Если муравей уже находится на той же плитке, что и цель, двигаемся напрямую
+  if (startTile.x === targetTile.x && startTile.y === targetTile.y) {
+    antPaths.delete(ant.id);
+    moveToward(ant, target, Math.min(speed, Math.max(0.15, distance(ant.pos, target))));
+    clampToUnderground(ant, world);
+    return isDugPos(world, ant.pos);
+  }
+
   let cached = antPaths.get(ant.id);
 
   // Пересчитываем путь, если кэша нет, цель изменилась, или первая плитка пути стала недоступна
@@ -255,6 +263,11 @@ export function moveUndergroundToward(world: World, ant: Ant, target: Vec2, spee
       const nextTarget = cached.tiles[0];
       const nextTargetPos = nextTarget.x === targetTile.x && nextTarget.y === targetTile.y ? target : tileCenter(nextTarget);
       moveToward(ant, nextTargetPos, Math.min(speed, Math.max(0.15, distance(ant.pos, nextTargetPos))));
+      clampToUnderground(ant, world);
+      return isDugPos(world, ant.pos);
+    } else {
+      // Если путь закончился, идем напрямую к цели
+      moveToward(ant, target, Math.min(speed, Math.max(0.15, distance(ant.pos, target))));
       clampToUnderground(ant, world);
       return isDugPos(world, ant.pos);
     }
