@@ -40,7 +40,7 @@ appRoot.innerHTML = `
         <div><span>Тик</span><strong id="tick">0</strong></div>
         <div><span>Паук</span><strong id="spider-generation">G1</strong></div>
         <div><span>Поколений паука</span><strong id="spider-generations-run">0</strong></div>
-        <div><span>Лучш. фитнес</span><strong id="best-fitness">0</strong></div>
+        <div><span>Лучший фитнес</span><strong id="best-fitness">0</strong></div>
       </div>
       <div class="colonyGrid">
         <section class="colonyStats colonyA">
@@ -73,7 +73,12 @@ appRoot.innerHTML = `
     </aside>
     <footer class="panel status">
       <span id="status">Подключение к ws://localhost:8787</span>
-      <span>Клик по карте — подкинуть еду</span>
+      <span>Клик по карте - подкинуть еду</span>
+      <span class="perfStat">FPS <strong id="fps">0</strong></span>
+      <span class="perfStat">Packet <strong id="packet-ms">0</strong> ms</span>
+      <span class="perfStat">Payload <strong id="payload-kb">0</strong> KB</span>
+      <span class="perfStat">Render <strong id="render-ms">0</strong> ms</span>
+      <span class="perfStat">Ants <strong id="ants-count">0</strong></span>
     </footer>
   </main>
 `;
@@ -268,6 +273,11 @@ style.textContent = `
     font-size: 13px;
   }
 
+  .perfStat strong {
+    color: #fffbea;
+    font-variant-numeric: tabular-nums;
+  }
+
   @media (max-width: 760px) {
     .topPanel {
       align-items: stretch;
@@ -309,6 +319,11 @@ const tick = document.querySelector<HTMLElement>("#tick");
 const spiderGeneration = document.querySelector<HTMLElement>("#spider-generation");
 const spiderGenerationsRun = document.querySelector<HTMLElement>("#spider-generations-run");
 const bestFitness = document.querySelector<HTMLElement>("#best-fitness");
+const fps = document.querySelector<HTMLElement>("#fps");
+const packetMs = document.querySelector<HTMLElement>("#packet-ms");
+const payloadKb = document.querySelector<HTMLElement>("#payload-kb");
+const renderMs = document.querySelector<HTMLElement>("#render-ms");
+const antsCount = document.querySelector<HTMLElement>("#ants-count");
 
 const colonyNodes = [0, 1].map((index) => {
   const key = index === 0 ? "a" : "b";
@@ -334,6 +349,11 @@ if (
   !spiderGeneration ||
   !spiderGenerationsRun ||
   !bestFitness ||
+  !fps ||
+  !packetMs ||
+  !payloadKb ||
+  !renderMs ||
+  !antsCount ||
   colonyNodes.some((nodes) => Object.values(nodes).some((node) => !node))
 ) {
   throw new Error("Missing UI nodes");
@@ -346,6 +366,11 @@ const tickNode = tick;
 const spiderGenerationNode = spiderGeneration;
 const spiderGenerationsRunNode = spiderGenerationsRun;
 const bestFitnessNode = bestFitness;
+const fpsNode = fps;
+const packetMsNode = packetMs;
+const payloadKbNode = payloadKb;
+const renderMsNode = renderMs;
+const antsCountNode = antsCount;
 const colonyStatNodes = colonyNodes.map((nodes) => ({
   generation: nodes.generation as HTMLElement,
   generationsRun: nodes.generationsRun as HTMLElement,
@@ -388,6 +413,11 @@ let isDragging = false;
 let pointerDown = false;
 let dragDistance = 0;
 let lastPointer = { x: 0, y: 0 };
+let framesSinceFpsUpdate = 0;
+let lastFpsUpdateAt = performance.now();
+let currentFps = 0;
+let lastRenderCostMs = 0;
+let lastPayloadKb = 0;
 const antInterp = new Map<string, AntInterp>();
 
 function clamp(value: number, min: number, max: number): number {
@@ -480,6 +510,14 @@ function updateHud(world: WorldSnapshot): void {
   });
 }
 
+function updatePerfHud(world: WorldSnapshot): void {
+  fpsNode.textContent = String(currentFps);
+  packetMsNode.textContent = String(Math.round(packetInterval));
+  payloadKbNode.textContent = String(lastPayloadKb);
+  renderMsNode.textContent = lastRenderCostMs.toFixed(1);
+  antsCountNode.textContent = String(world.ants.length);
+}
+
 function draw(interpT: number): void {
   if (!latestWorld) {
     return;
@@ -502,6 +540,7 @@ function draw(interpT: number): void {
     return { ...ant, pos: { x, y }, heading: { x: Math.cos(angle), y: Math.sin(angle) } };
   });
 
+  const renderStart = performance.now();
   renderWorld(
     pixi.stage,
     pixi.renderer,
@@ -512,7 +551,7 @@ function draw(interpT: number): void {
     camera,
     currentUndergroundColony
   );
-  updateHud(latestWorld);
+  lastRenderCostMs = performance.now() - renderStart;
 }
 
 for (const button of viewButtons) {
@@ -555,6 +594,13 @@ pixi.ticker.add(() => {
 
   const interpT = lastPacketTime > 0 ? Math.min((now - lastPacketTime) / packetInterval, 1) : 1;
   draw(interpT);
+  framesSinceFpsUpdate += 1;
+  if (now - lastFpsUpdateAt >= 1000) {
+    currentFps = Math.round((framesSinceFpsUpdate * 1000) / Math.max(1, now - lastFpsUpdateAt));
+    framesSinceFpsUpdate = 0;
+    lastFpsUpdateAt = now;
+    updatePerfHud(latestWorld);
+  }
   lastRenderAt = now;
 });
 
@@ -689,7 +735,9 @@ socket.addEventListener("message", (event) => {
   }
   lastPacketTime = now;
 
-  const snap = JSON.parse(String(event.data)) as WorldSnapshot;
+  const rawMessage = String(event.data);
+  lastPayloadKb = Math.round(new Blob([rawMessage]).size / 1024);
+  const snap = JSON.parse(rawMessage) as WorldSnapshot;
 
   const hasNewPheromones = snap.pheromones && snap.pheromones.food && snap.pheromones.food.i && snap.pheromones.food.i.length > 0;
   if (hasNewPheromones) {
@@ -736,6 +784,8 @@ socket.addEventListener("message", (event) => {
   }
 
   latestWorld = snap;
+  updateHud(snap);
+  updatePerfHud(snap);
   if (camera.x === 50 && camera.y === 50) {
     centerOnNest(snap);
   }

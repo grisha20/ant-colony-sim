@@ -9,7 +9,9 @@
   "scripts": {
     "dev": "concurrently \"npm run dev -w server\" \"npm run dev -w client\"",
     "check": "npm run check -w server && npm run check -w client",
-    "reset": "node -e \"require('node:fs').rmSync('snapshot.json',{force:true})\""
+    "reset": "node -e \"require('node:fs').rmSync('snapshot.json',{force:true})\"",
+    "stats:snapshot": "tsx server/src/bench/snapshotStats.ts",
+    "bench:server": "tsx server/src/bench/serverStep.ts"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

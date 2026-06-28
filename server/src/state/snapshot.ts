@@ -35,7 +35,7 @@ export async function saveWorldSnapshot(world: World): Promise<void> {
   isSaving = true;
   try {
     await mkdir(path.dirname(CONFIG.snapshotFile), { recursive: true });
-    await writeFile(CONFIG.snapshotFile, JSON.stringify(toSnapshot(world)), "utf8");
+    await writeFile(CONFIG.snapshotFile, JSON.stringify(toSnapshot(world, false)), "utf8");
   } finally {
     isSaving = false;
   }

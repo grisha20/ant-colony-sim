@@ -18,6 +18,8 @@ export type SocketHub = {
   close(): void;
 };
 
+const MAX_BUFFERED_BYTES = 2 * 1024 * 1024;
+
 function parseCommand(raw: string): ClientCommand | null {
   try {
     const value = JSON.parse(raw) as unknown;
@@ -89,6 +91,9 @@ export function createSocketHub(
       const message = JSON.stringify(snapshot);
       for (const client of clients) {
         if (client.readyState === WebSocket.OPEN) {
+          if (client.bufferedAmount > MAX_BUFFERED_BYTES) {
+            continue;
+          }
           client.send(message);
         }
       }
