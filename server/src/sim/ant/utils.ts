@@ -6,6 +6,16 @@ export function distance(a: Vec2, b: Vec2): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+export function distanceSq(a: Vec2, b: Vec2): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy;
+}
+
+export function isWithinRadius(a: Vec2, b: Vec2, radius: number): boolean {
+  return distanceSq(a, b) <= radius * radius;
+}
+
 export function normalize(vec: Vec2): Vec2 {
   const length = Math.hypot(vec.x, vec.y);
   if (length <= 0.001) {

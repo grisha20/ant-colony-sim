@@ -3,7 +3,7 @@ import { CONFIG } from "../../config";
 import { tickCache } from "../cache";
 import { addFoodSource } from "../world";
 import type { World } from "../world";
-import { distance, normalize } from "./utils";
+import { distance, isWithinRadius, normalize } from "./utils";
 import {
   applySeparation,
   clampToSurface,
@@ -25,7 +25,7 @@ export function isThreateningSpider(world: World, spiderIndex: number): boolean 
   const list = tickCache.surfaceAnts;
   const len = list.length;
   for (let i = 0; i < len; i += 1) {
-    if (distance(list[i].pos, enemy.pos) <= attackRadius) {
+    if (isWithinRadius(list[i].pos, enemy.pos, attackRadius)) {
       return true;
     }
   }
@@ -44,7 +44,7 @@ export function defenderCountForSpider(world: World, spiderIndex: number): numbe
   const defRad = CONFIG.defenseRadius;
   for (let i = 0; i < len; i += 1) {
     const ant = list[i];
-    if (ant.state === "fight" && ant.carrying <= 0 && distance(ant.pos, enemy.pos) <= defRad) {
+    if (ant.state === "fight" && ant.carrying <= 0 && isWithinRadius(ant.pos, enemy.pos, defRad)) {
       count += 1;
     }
   }
@@ -63,7 +63,7 @@ export function freeWorkerCountNearSpider(world: World, spiderIndex: number): nu
   const defRad = CONFIG.defenseRadius;
   for (let i = 0; i < len; i += 1) {
     const ant = list[i];
-    if (ant.carrying <= 0 && distance(ant.pos, enemy.pos) <= defRad) {
+    if (ant.carrying <= 0 && isWithinRadius(ant.pos, enemy.pos, defRad)) {
       count += 1;
     }
   }
@@ -71,18 +71,36 @@ export function freeWorkerCountNearSpider(world: World, spiderIndex: number): nu
 }
 
 export function enemyColonyAnts(world: World, ant: Ant): Ant[] {
-  return (world.colonies ?? [])
-    .filter((colony) => colony.id !== ant.colonyId)
-    .flatMap((colony) => colony.ants)
-    .filter((other) => other.layer === "surface" && other.state !== "dead");
+  const result: Ant[] = [];
+  for (const colony of world.colonies ?? []) {
+    if (colony.id === ant.colonyId) {
+      continue;
+    }
+    for (let i = 0; i < colony.ants.length; i += 1) {
+      const other = colony.ants[i];
+      if (other.layer === "surface" && other.state !== "dead") {
+        result.push(other);
+      }
+    }
+  }
+  return result;
 }
 
 export function nearestEnemyAnt(world: World, ant: Ant): { ant: Ant; distance: number } | null {
   let nearest: { ant: Ant; distance: number } | null = null;
-  for (const enemy of enemyColonyAnts(world, ant)) {
-    const enemyDistance = distance(ant.pos, enemy.pos);
-    if (!nearest || enemyDistance < nearest.distance) {
-      nearest = { ant: enemy, distance: enemyDistance };
+  for (const colony of world.colonies ?? []) {
+    if (colony.id === ant.colonyId) {
+      continue;
+    }
+    for (let i = 0; i < colony.ants.length; i += 1) {
+      const enemy = colony.ants[i];
+      if (enemy.layer !== "surface" || enemy.state === "dead") {
+        continue;
+      }
+      const enemyDistance = distance(ant.pos, enemy.pos);
+      if (!nearest || enemyDistance < nearest.distance) {
+        nearest = { ant: enemy, distance: enemyDistance };
+      }
     }
   }
   return nearest;
@@ -165,7 +183,7 @@ export function handleEnemyColonyCombat(world: World, ant: Ant): boolean {
 
   const nearest = nearestEnemyAnt(world, ant);
   const superFood = nearestSuperFood(world, ant.pos);
-  const nearSuperFood = !!superFood && distance(ant.pos, superFood.pos) <= CONFIG.superFoodCombatRadius;
+  const nearSuperFood = !!superFood && isWithinRadius(ant.pos, superFood.pos, CONFIG.superFoodCombatRadius);
 
   if (nearest && nearest.distance <= CONFIG.antCombatRadius) {
     const wantsFight =
@@ -193,7 +211,7 @@ export function handleEnemyColonyCombat(world: World, ant: Ant): boolean {
 
   // Проверяем борьбу за супер-ресурсы в зависимости от агрессии
   if (nearSuperFood && superFood) {
-    if (nearest && distance(nearest.ant.pos, superFood.pos) <= CONFIG.superFoodCombatRadius) {
+    if (nearest && isWithinRadius(nearest.ant.pos, superFood.pos, CONFIG.superFoodCombatRadius)) {
       const chaseRadius = CONFIG.antCombatRadius + (CONFIG.superFoodCombatRadius - CONFIG.antCombatRadius) * world.directives.aggression;
       if (nearest.distance <= chaseRadius && ant.carrying <= 0) {
         dropCarriedFood(world, ant);
@@ -254,7 +272,7 @@ export function moveFighting(world: World, ant: Ant): boolean {
     return false;
   }
 
-  const liveAntsCount = world.ants.filter((a) => a.state !== "dead").length;
+  const liveAntsCount = tickCache.liveAntsCount;
   const isStartPeriod = liveAntsCount <= 10;
 
   if (isStartPeriod) {

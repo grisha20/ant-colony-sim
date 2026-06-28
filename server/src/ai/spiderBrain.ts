@@ -1,5 +1,6 @@
 import type { Ant, Enemy, FoodSource, Vec2 } from "../../../shared/types";
 import { CONFIG } from "../config";
+import { isWithinRadius } from "../sim/ant/utils";
 import type { World } from "../sim/world";
 import type { SpiderGenome } from "./spiderGenome";
 
@@ -32,8 +33,30 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
-function surfaceAnts(world: World): Ant[] {
-  return world.ants.filter((ant) => ant.layer === "surface" && ant.state !== "dead");
+function isLiveSurfaceAnt(ant: Ant): boolean {
+  return ant.layer === "surface" && ant.state !== "dead";
+}
+
+function liveAntCount(world: World): number {
+  let count = 0;
+  for (const ant of world.ants) {
+    if (ant.state !== "dead") {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+function surfaceAntCount(world: World): number {
+  let count = 0;
+  for (const ant of world.ants) {
+    if (isLiveSurfaceAnt(ant)) {
+      count += 1;
+    }
+  }
+
+  return count;
 }
 
 function nearestFood(world: World, spider: Enemy): FoodSource | null {
@@ -82,7 +105,11 @@ function hasStorageWork(world: World, spider: Enemy): boolean {
 
 function nearestAnt(world: World, spider: Enemy): { ant: Ant; distance: number } | null {
   let nearest: { ant: Ant; distance: number } | null = null;
-  for (const ant of surfaceAnts(world)) {
+  for (const ant of world.ants) {
+    if (!isLiveSurfaceAnt(ant)) {
+      continue;
+    }
+
     const antDistance = distance(spider.pos, ant.pos);
     if (!nearest || antDistance < nearest.distance) {
       nearest = { ant, distance: antDistance };
@@ -93,28 +120,47 @@ function nearestAnt(world: World, spider: Enemy): { ant: Ant; distance: number }
 }
 
 function nearbyAntCount(world: World, spider: Enemy, radius: number): number {
-  return surfaceAnts(world).filter((ant) => distance(ant.pos, spider.pos) <= radius).length;
+  let count = 0;
+  for (const ant of world.ants) {
+    if (isLiveSurfaceAnt(ant) && isWithinRadius(ant.pos, spider.pos, radius)) {
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+function mobbingFighterCount(world: World, spider: Enemy): number {
+  let count = 0;
+  for (const ant of world.ants) {
+    if (isLiveSurfaceAnt(ant) && ant.state === "fight" && isWithinRadius(ant.pos, spider.pos, CONFIG.defenseRadius)) {
+      count += 1;
+    }
+  }
+
+  return count;
 }
 
 function antCentroid(world: World, spider: Enemy): Vec2 | null {
-  const ants = surfaceAnts(world);
-  if (ants.length === 0) {
+  let totalX = 0;
+  let totalY = 0;
+  let totalWeight = 0;
+  for (const ant of world.ants) {
+    if (!isLiveSurfaceAnt(ant)) {
+      continue;
+    }
+
+    const weight = 1 / Math.max(1, distance(spider.pos, ant.pos));
+    totalX += ant.pos.x * weight;
+    totalY += ant.pos.y * weight;
+    totalWeight += weight;
+  }
+
+  if (totalWeight <= 0) {
     return null;
   }
 
-  const weighted = ants.reduce(
-    (total, ant) => {
-      const weight = 1 / Math.max(1, distance(spider.pos, ant.pos));
-      return {
-        x: total.x + ant.pos.x * weight,
-        y: total.y + ant.pos.y * weight,
-        weight: total.weight + weight
-      };
-    },
-    { x: 0, y: 0, weight: 0 }
-  );
-
-  return { x: weighted.x / weighted.weight, y: weighted.y / weighted.weight };
+  return { x: totalX / totalWeight, y: totalY / totalWeight };
 }
 
 function moveToward(spider: Enemy, target: Vec2, speed: number): void {
@@ -228,15 +274,13 @@ function ambushPoint(world: World, spider: Enemy, genome: SpiderGenome): Vec2 {
 }
 
 export function chooseMode(world: World, spider: Enemy, genome: SpiderGenome): SpiderMode {
-  const liveAntsCount = world.ants.filter((a) => a.state !== "dead").length;
+  const liveAntsCount = liveAntCount(world);
   const isStartPeriod = liveAntsCount <= 10;
 
   const hunger = clamp01(spider.hunger / CONFIG.spiderHungryThreshold);
   const hp = clamp01(spider.hp / Math.max(1, spider.maxHp));
   const crowd = nearbyAntCount(world, spider, genome.genes.swarmCaution);
-  const mobbingFighters = surfaceAnts(world).filter(
-    (ant) => ant.state === "fight" && distance(ant.pos, spider.pos) <= CONFIG.defenseRadius
-  ).length;
+  const mobbingFighters = mobbingFighterCount(world, spider);
   const crowdPressure = clamp01(crowd / 5);
   const caution = crowdPressure * (1 - genome.genes.aggression);
   const underThreat =
@@ -248,33 +292,57 @@ export function chooseMode(world: World, spider: Enemy, genome: SpiderGenome): S
   const hungry = spider.hunger >= CONFIG.spiderHungryThreshold;
   const storageWork = hasStorageWork(world, spider);
   const targetCloseness = target ? clamp01(1 - target.distance / Math.max(1, genome.genes.chaseTriggerDist)) : 0;
-  const antsAround = clamp01(surfaceAnts(world).length / 8);
+  const antsAround = clamp01(surfaceAntCount(world) / 8);
   const entranceCloseness = clamp01(1 - distance(spider.pos, CONFIG.surfaceEntrance) / 35);
 
-  const utilities: Record<SpiderMode, number> = {
-    retreat:
-      (mobbingFighters >= CONFIG.spiderMobRetreatCount ? CONFIG.spiderMobRetreatUtility : 0) +
-      (hp <= CONFIG.spiderLowHpRetreatThreshold ? CONFIG.spiderLowHpRetreatUtility : 0),
-    chase: isStartPeriod
-      ? 0
-      : targetCloseness * (1.2 + genome.genes.aggression) +
-        hunger * (0.7 + genome.genes.hungerAggroGain) -
-        caution * 0.35,
-    stalk: isStartPeriod
-      ? 0
-      : genome.genes.aggression * 0.4 + hunger * (0.6 + antsAround * 0.5) - caution * 0.2,
-    ambush: isStartPeriod
-      ? 0
-      : genome.genes.ambushPreference * (0.45 + hunger * 0.25) +
-        genome.genes.entranceAffinity * entranceCloseness,
-    feed: hungry && !underThreat && (spider.hoard > 0 || carrion) ? hunger * 2.4 + carrionCloseness * 0.6 : 0,
-    store: !hungry && !underThreat && storageWork ? 1.35 + genome.genes.ambushPreference * 0.25 : 0,
-    wander: 0.2 + (1 - hunger) * 0.15
-  };
+  const retreatUtility =
+    (mobbingFighters >= CONFIG.spiderMobRetreatCount ? CONFIG.spiderMobRetreatUtility : 0) +
+    (hp <= CONFIG.spiderLowHpRetreatThreshold ? CONFIG.spiderLowHpRetreatUtility : 0);
+  const chaseUtility = isStartPeriod
+    ? 0
+    : targetCloseness * (1.2 + genome.genes.aggression) +
+      hunger * (0.7 + genome.genes.hungerAggroGain) -
+      caution * 0.35;
+  const stalkUtility = isStartPeriod
+    ? 0
+    : genome.genes.aggression * 0.4 + hunger * (0.6 + antsAround * 0.5) - caution * 0.2;
+  const ambushUtility = isStartPeriod
+    ? 0
+    : genome.genes.ambushPreference * (0.45 + hunger * 0.25) +
+      genome.genes.entranceAffinity * entranceCloseness;
+  const feedUtility = hungry && !underThreat && (spider.hoard > 0 || carrion)
+    ? hunger * 2.4 + carrionCloseness * 0.6
+    : 0;
+  const storeUtility = !hungry && !underThreat && storageWork ? 1.35 + genome.genes.ambushPreference * 0.25 : 0;
+  const wanderUtility = 0.2 + (1 - hunger) * 0.15;
 
-  return (Object.entries(utilities) as Array<[SpiderMode, number]>).reduce((best, current) =>
-    current[1] > best[1] ? current : best
-  )[0];
+  let bestMode: SpiderMode = "retreat";
+  let bestUtility = retreatUtility;
+  if (chaseUtility > bestUtility) {
+    bestMode = "chase";
+    bestUtility = chaseUtility;
+  }
+  if (stalkUtility > bestUtility) {
+    bestMode = "stalk";
+    bestUtility = stalkUtility;
+  }
+  if (ambushUtility > bestUtility) {
+    bestMode = "ambush";
+    bestUtility = ambushUtility;
+  }
+  if (feedUtility > bestUtility) {
+    bestMode = "feed";
+    bestUtility = feedUtility;
+  }
+  if (storeUtility > bestUtility) {
+    bestMode = "store";
+    bestUtility = storeUtility;
+  }
+  if (wanderUtility > bestUtility) {
+    bestMode = "wander";
+  }
+
+  return bestMode;
 }
 
 export function applyMode(world: World, spider: Enemy, mode: SpiderMode, genome: SpiderGenome): void {

@@ -97,7 +97,14 @@ export function getBrood(world: World, broodId: string | undefined): Brood | und
 }
 
 export function assignedFeederCount(world: World, broodId: string): number {
-  return world.ants.filter((ant) => ant.layer === "underground" && ant.state === "feed" && ant.broodId === broodId).length;
+  let count = 0;
+  for (const ant of world.ants) {
+    if (ant.layer === "underground" && ant.state === "feed" && ant.broodId === broodId) {
+      count += 1;
+    }
+  }
+
+  return count;
 }
 
 export function busyNurseCount(world: World): number {
@@ -113,7 +120,14 @@ export function pendingBroodTransportCount(world: World): number {
     return 0;
   }
 
-  return world.underground.brood.filter((brood) => needsBroodTransport(brood) && !brood.carriedBy && !hasAssignedCarrier(world, brood.id)).length;
+  let count = 0;
+  for (const brood of world.underground.brood) {
+    if (needsBroodTransport(brood) && !brood.carriedBy && !hasAssignedCarrier(world, brood.id)) {
+      count += 1;
+    }
+  }
+
+  return count;
 }
 
 export function needsSurfaceNurseReturn(world: World): boolean {

@@ -15,20 +15,26 @@ export const tickCache = {
   activeForagers: 0,
   activeNurses: 0,
   activeDiggers: 0,
+  activeAndTransitioningForagers: 0,
   undergroundDiggers: 0,
   undergroundNurses: 0,
+  undergroundExitingAnts: [] as Ant[],
   surfaceAnts: [] as Ant[],
-  queenGuardIds: new Set<string>()
+  queenGuardIds: new Set<string>(),
+  liveAntsCount: 0
 };
 
 export function updateTickCache(world: World): void {
   let activeForagers = 0;
   let activeNurses = 0;
   let activeDiggers = 0;
+  let activeAndTransitioningForagers = 0;
   let undergroundDiggers = 0;
   let undergroundNurses = 0;
+  let liveAntsCount = 0;
   const surfaceAnts: Ant[] = [];
   const idleUndergroundAnts: Ant[] = [];
+  const undergroundExitingAnts: Ant[] = [];
 
   const ants = world.ants;
   const len = ants.length;
@@ -38,11 +44,14 @@ export function updateTickCache(world: World): void {
       continue;
     }
 
+    liveAntsCount += 1;
+
     if (ant.layer === "surface") {
       surfaceAnts.push(ant);
 
       if (ant.state === "search" && ant.carrying <= 0 && ant.job !== "nurse" && ant.job !== "dig") {
         activeForagers += 1;
+        activeAndTransitioningForagers += 1;
       }
       if (ant.job === "nurse" && ant.state === "return") {
         activeNurses += 1;
@@ -51,6 +60,10 @@ export function updateTickCache(world: World): void {
         activeDiggers += 1;
       }
     } else if (ant.layer === "underground") {
+      if (ant.state === "toEntrance") {
+        activeAndTransitioningForagers += 1;
+        undergroundExitingAnts.push(ant);
+      }
       if (ant.state === "carryBrood" || ant.state === "feed") {
         activeNurses += 1;
         undergroundNurses += 1;
@@ -74,12 +87,16 @@ export function updateTickCache(world: World): void {
       guardIds.add(idleUndergroundAnts[i].id);
     }
   }
+  undergroundExitingAnts.sort((a, b) => numericAntId(a.id) - numericAntId(b.id));
 
   tickCache.activeForagers = activeForagers;
   tickCache.activeNurses = activeNurses;
   tickCache.activeDiggers = activeDiggers;
+  tickCache.activeAndTransitioningForagers = activeAndTransitioningForagers;
   tickCache.undergroundDiggers = undergroundDiggers;
   tickCache.undergroundNurses = undergroundNurses;
+  tickCache.undergroundExitingAnts = undergroundExitingAnts;
   tickCache.surfaceAnts = surfaceAnts;
   tickCache.queenGuardIds = guardIds;
+  tickCache.liveAntsCount = liveAntsCount;
 }

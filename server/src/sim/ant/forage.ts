@@ -2,7 +2,7 @@ import type { Ant, Debris, Vec2 } from "../../../../shared/types";
 import { CONFIG } from "../../config";
 import type { World } from "../world";
 import { randomHeading } from "../world";
-import { distance, normalize, numericAntId } from "./utils";
+import { distance, isWithinRadius, normalize, numericAntId } from "./utils";
 import {
   applySpiderAvoidance,
   applySeparation,
@@ -77,7 +77,7 @@ export function nearestAvailableFood(world: World, ant: Ant): SurfaceFoodTarget 
 
 export function pickupFoodIfReached(world: World, ant: Ant, target: SurfaceFoodTarget): boolean {
   const source = target.list[target.index];
-  if (!source || source.amount <= 0 || distance(ant.pos, source.pos) > CONFIG.foodPickupRadius) {
+  if (!source || source.amount <= 0 || !isWithinRadius(ant.pos, source.pos, CONFIG.foodPickupRadius)) {
     return false;
   }
 
@@ -137,7 +137,7 @@ export function moveSearching(world: World, ant: Ant): void {
   const isSuper = food && food.source.kind === "spiderCarcass";
   const approachRange = isSuper ? CONFIG.superFoodDirectApproachRange : CONFIG.foodDirectApproachRange;
 
-  if (food && distance(ant.pos, food.source.pos) <= approachRange) {
+  if (food && isWithinRadius(ant.pos, food.source.pos, approachRange)) {
     ant.state = "search";
     moveSurfaceToward(world, ant, food.source.pos, false);
     return;

@@ -3,7 +3,8 @@ import { CONFIG } from "../../config";
 import { tileCenter } from "../underground";
 import type { UndergroundNode } from "../nav";
 import type { World } from "../world";
-import { distance, numericAntId } from "./utils";
+import { tickCache } from "../cache";
+import { distance, isWithinRadius, numericAntId } from "./utils";
 import {
   clampToUnderground,
   findNearestDugTile,
@@ -106,10 +107,10 @@ function isSurfaceExitThreatened(world: World): boolean {
       continue;
     }
 
-    if (distance(enemy.pos, world.surface.entrance) <= blockRadius) {
+    if (isWithinRadius(enemy.pos, world.surface.entrance, blockRadius)) {
       return true;
     }
-    if (distance(enemy.lair, world.surface.entrance) <= CONFIG.spiderLairWebRadius + 3) {
+    if (isWithinRadius(enemy.lair, world.surface.entrance, CONFIG.spiderLairWebRadius + 3)) {
       return true;
     }
   }
@@ -119,15 +120,18 @@ function isSurfaceExitThreatened(world: World): boolean {
 
 function shouldWaitForExitSlot(world: World, ant: Ant): boolean {
   const maxConcurrentExits = Math.max(4, Math.min(16, Math.ceil(world.directives.activeTarget / 4)));
-  const exiting = world.ants
-    .filter((other) => other.layer === "underground" && other.state === "toEntrance")
-    .sort((a, b) => numericAntId(a.id) - numericAntId(b.id));
+  const exiting = tickCache.undergroundExitingAnts;
 
   if (exiting.length < maxConcurrentExits) {
     return false;
   }
 
-  return !exiting.slice(0, maxConcurrentExits).some((other) => other.id === ant.id);
+  for (let i = 0; i < maxConcurrentExits; i += 1) {
+    if (exiting[i]?.id === ant.id) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function stepUnderground(world: World, ant: Ant): void {
@@ -304,7 +308,7 @@ export function stepSurface(world: World, ant: Ant): void {
 
   if (ant.carrying <= 0 && !ant.carryingDebris) {
     const food = nearestAvailableFood(world, ant);
-    const hasCloseFood = food && distance(ant.pos, food.source.pos) < CONFIG.antFoodSightRadius;
+    const hasCloseFood = food && isWithinRadius(ant.pos, food.source.pos, CONFIG.antFoodSightRadius);
 
     const colony = world.colonies.find(c => c.id === ant.colonyId);
     const colonyAntsCount = colony ? colony.ants.length : 0;

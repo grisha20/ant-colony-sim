@@ -52,54 +52,15 @@ export function activeSurfaceForagers(world: World): number {
 }
 
 export function countActiveAndTransitioningForagers(world: World): number {
-  let count = 0;
-  const len = world.ants.length;
-  for (let i = 0; i < len; i += 1) {
-    const ant = world.ants[i];
-    if (ant.state === "dead") {
-      continue;
-    }
-    if (ant.layer === "surface") {
-      if (ant.state === "search" && ant.carrying <= 0 && ant.job !== "nurse" && ant.job !== "dig") {
-        count += 1;
-      }
-    } else {
-      if (ant.state === "toEntrance") {
-        count += 1;
-      }
-    }
-  }
-  return count;
+  return tickCache.activeAndTransitioningForagers;
 }
 
 export function countUndergroundNurses(world: World): number {
-  let count = 0;
-  const len = world.ants.length;
-  for (let i = 0; i < len; i += 1) {
-    const ant = world.ants[i];
-    if (ant.state === "dead") {
-      continue;
-    }
-    if (ant.layer === "underground" && (ant.state === "carryBrood" || ant.state === "feed")) {
-      count += 1;
-    }
-  }
-  return count;
+  return tickCache.undergroundNurses;
 }
 
 export function countUndergroundDiggers(world: World): number {
-  let count = 0;
-  const len = world.ants.length;
-  for (let i = 0; i < len; i += 1) {
-    const ant = world.ants[i];
-    if (ant.state === "dead") {
-      continue;
-    }
-    if (ant.layer === "underground" && (ant.state === "dig" || ant.state === "carryDirt" || ant.carryingDirt)) {
-      count += 1;
-    }
-  }
-  return count;
+  return tickCache.undergroundDiggers;
 }
 
 export function shouldReturnFromSurface(world: World, ant: Ant): boolean {

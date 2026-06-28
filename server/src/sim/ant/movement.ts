@@ -5,7 +5,7 @@ import type { UndergroundNode } from "../nav";
 import { isDugTile, tileCenter } from "../underground";
 import type { World } from "../world";
 import { randomHeading } from "../world";
-import { distance, fanDirection, moveToward, normalize, posTile } from "./utils";
+import { distance, fanDirection, isWithinRadius, moveToward, normalize, posTile } from "./utils";
 
 export type CachedPath = {
   targetTile: Vec2;
@@ -31,7 +31,7 @@ export function surfaceMoveSpeed(world: World, ant: Ant): number {
   for (let i = 0; i < len; i += 1) {
     const other = list[i];
     if (other.id !== ant.id) {
-      if (distance(other.pos, ant.pos) <= defRad) {
+      if (isWithinRadius(other.pos, ant.pos, defRad)) {
         nearbyWorkers += 1;
       }
     }
@@ -44,7 +44,7 @@ export function surfaceMoveSpeed(world: World, ant: Ant): number {
   // Замедление муравьев на паутине вокруг гнезда паука
   for (const enemy of world.enemies) {
     if (enemy.type === "spider" && enemy.hp > 0) {
-      if (distance(ant.pos, enemy.lair) <= CONFIG.spiderLairWebRadius) {
+      if (isWithinRadius(ant.pos, enemy.lair, CONFIG.spiderLairWebRadius)) {
         speed *= CONFIG.spiderWebSpeedPenalty;
         break;
       }
@@ -364,8 +364,12 @@ export function applySeparation(world: World, ant: Ant, desired: Vec2): Vec2 {
 
   const separationRadius = 1.8;
 
-  for (const other of world.ants) {
-    if (other.id === ant.id || other.layer !== "surface" || other.state === "dead") {
+  // tickCache.surfaceAnts already filtered: layer === "surface" && state !== "dead"
+  const list = tickCache.surfaceAnts;
+  const len = list.length;
+  for (let i = 0; i < len; i += 1) {
+    const other = list[i];
+    if (other.id === ant.id) {
       continue;
     }
 
@@ -393,7 +397,7 @@ export function applySeparation(world: World, ant: Ant, desired: Vec2): Vec2 {
 
 export function tryCrossLayer(world: World, ant: Ant): boolean {
   const undergroundExitRadius = Math.max(CONFIG.entranceRadiusUnderground, 4.2);
-  if (ant.layer === "underground" && distance(ant.pos, world.underground.entrance) <= undergroundExitRadius) {
+  if (ant.layer === "underground" && isWithinRadius(ant.pos, world.underground.entrance, undergroundExitRadius)) {
     ant.layer = "surface";
     ant.state = "search";
     ant.pos = { ...world.surface.entrance };
@@ -411,7 +415,7 @@ export function tryCrossLayer(world: World, ant: Ant): boolean {
     ant.state === "return" || ant.state === "carry" || ant.carrying > 0
       ? Math.max(CONFIG.entranceRadiusSurface, 3.5)
       : CONFIG.entranceRadiusSurface;
-  if (ant.layer === "surface" && distance(ant.pos, world.surface.entrance) <= surfaceEntryRadius) {
+  if (ant.layer === "surface" && isWithinRadius(ant.pos, world.surface.entrance, surfaceEntryRadius)) {
     ant.layer = "underground";
     ant.state = ant.carrying > 0 ? "deposit" : "idle";
     ant.pos = { ...world.underground.entrance };

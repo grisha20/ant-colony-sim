@@ -2,6 +2,7 @@ import type { Enemy, Vec2 } from "../../../shared/types";
 import { applyMode, chooseMode, hasAvailableCarrion, isSpiderFastMode, type SpiderMode } from "../ai/spiderBrain";
 import { recordAndEvolveSpider, saveSpiderGenome } from "../ai/spiderGenome";
 import { CONFIG } from "../config";
+import { isWithinRadius } from "./ant/utils";
 import { addFoodSource, type World } from "./world";
 
 let nextEnemyId = 1;
@@ -21,7 +22,7 @@ function randomSurfacePoint(): Vec2 {
       y: 8 + Math.random() * (CONFIG.mapHeight - 16)
     };
 
-    if (distance(pos, CONFIG.surfaceEntrance) > CONFIG.spiderAvoidRadius * 2.5) {
+    if (!isWithinRadius(pos, CONFIG.surfaceEntrance, CONFIG.spiderAvoidRadius * 2.5)) {
       return pos;
     }
   }
@@ -44,7 +45,7 @@ function randomLairPoint(): Vec2 {
             : { x: Math.random() * CONFIG.mapWidth, y: CONFIG.mapHeight - Math.random() * margin }
     );
 
-    if (distance(pos, CONFIG.surfaceEntrance) >= minNestDistance && distance(pos, CONFIG.surfaceEntranceB) >= minNestDistance) {
+    if (!isWithinRadius(pos, CONFIG.surfaceEntrance, minNestDistance) && !isWithinRadius(pos, CONFIG.surfaceEntranceB, minNestDistance)) {
       return pos;
     }
   }
@@ -79,7 +80,7 @@ function keepAwayFromNest(enemy: Enemy, direction: Vec2, speed: number): Vec2 {
     y: enemy.pos.y + direction.y * speed
   };
   const minNestDistance = CONFIG.spiderAvoidRadius * 2.2;
-  if (distance(next, CONFIG.surfaceEntrance) >= minNestDistance) {
+  if (!isWithinRadius(next, CONFIG.surfaceEntrance, minNestDistance)) {
     return direction;
   }
 
@@ -103,22 +104,30 @@ function loneChaseTarget(world: World, enemy: Enemy): Vec2 | null {
     return null;
   }
 
-  const nearby = world.ants.filter(
-    (ant) => ant.layer === "surface" && ant.state !== "dead" && distance(ant.pos, enemy.pos) <= CONFIG.spiderChaseRange
-  );
-  if (nearby.length !== 1) {
-    return null;
+  let loneAnt: Vec2 | null = null;
+  let nearbyCount = 0;
+  const chaseRange = CONFIG.spiderChaseRange;
+  for (const ant of world.ants) {
+    if (ant.layer !== "surface" || ant.state === "dead") {
+      continue;
+    }
+    if (isWithinRadius(ant.pos, enemy.pos, chaseRange)) {
+      nearbyCount += 1;
+      if (nearbyCount > 1) {
+        return null;
+      }
+      loneAnt = ant.pos;
+    }
   }
-
-  return nearby[0].pos;
+  return nearbyCount === 1 ? loneAnt : null;
 }
 
-function moveSpider(world: World, enemy: Enemy): void {
+function moveSpider(world: World, enemy: Enemy, liveAntsCount: number): void {
   const genome = world.spiderGenomeState.current;
   const nearest = nearestSurfaceAnt(world, enemy);
   const underPressure = isSpiderUnderPressure(world, enemy);
   const hungry = enemy.hunger >= CONFIG.spiderHungryThreshold;
-  const atSafeLair = distance(enemy.pos, enemy.lair) <= CONFIG.spiderLairSafeRadius;
+  const atSafeLair = isWithinRadius(enemy.pos, enemy.lair, CONFIG.spiderLairSafeRadius);
   const desperate = enemy.hunger >= CONFIG.spiderStarveThreshold * CONFIG.spiderDesperateFeedFactor;
   const canFeedUnderPressure = (atSafeLair && enemy.hoard > 0) || desperate;
   const canStoreUnderPressure = nearbyAntCount(world, enemy, CONFIG.spiderStoreSafeRadius) === 0;
@@ -135,7 +144,6 @@ function moveSpider(world: World, enemy: Enemy): void {
     return;
   }
 
-  const liveAntsCount = world.ants.filter(a => a.state !== "dead").length;
   if (
     hungry &&
     nearest &&
@@ -161,6 +169,16 @@ function moveSpider(world: World, enemy: Enemy): void {
   }
 
   applySpiderMode(world, enemy, state.mode, genome);
+}
+
+function liveAntCount(world: World): number {
+  let count = 0;
+  for (const ant of world.ants) {
+    if (ant.state !== "dead") {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function updateSpiderStamina(enemy: Enemy, fastMode: boolean): void {
@@ -193,25 +211,29 @@ function applySpiderMode(
 }
 
 function nearestSurfaceAnt(world: World, enemy: Enemy): { distance: number } | null {
-  let nearest: { distance: number } | null = null;
+  let nearestDist = Number.POSITIVE_INFINITY;
+  let found = false;
   for (const ant of world.ants) {
     if (ant.layer !== "surface" || ant.state === "dead") {
       continue;
     }
-
     const antDistance = distance(ant.pos, enemy.pos);
-    if (!nearest || antDistance < nearest.distance) {
-      nearest = { distance: antDistance };
+    if (antDistance < nearestDist) {
+      nearestDist = antDistance;
+      found = true;
     }
   }
-
-  return nearest;
+  return found ? { distance: nearestDist } : null;
 }
 
 function nearbyAntCount(world: World, enemy: Enemy, radius: number): number {
-  return world.ants.filter(
-    (ant) => ant.layer === "surface" && ant.state !== "dead" && distance(ant.pos, enemy.pos) <= radius
-  ).length;
+  let count = 0;
+  for (const ant of world.ants) {
+    if (ant.layer === "surface" && ant.state !== "dead" && isWithinRadius(ant.pos, enemy.pos, radius)) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 export function createSpider(): Enemy {
@@ -281,12 +303,17 @@ function evolveSpiderGeneration(world: World): void {
 }
 
 function isSpiderUnderPressure(world: World, enemy: Enemy): boolean {
-  const mobbingFighters = world.ants.filter(
-    (ant) =>
+  let mobbingFighters = 0;
+  const defRad = CONFIG.defenseRadius;
+  for (const ant of world.ants) {
+    if (
       ant.layer === "surface" &&
       ant.state === "fight" &&
-      distance(ant.pos, enemy.pos) <= CONFIG.defenseRadius
-  ).length;
+      isWithinRadius(ant.pos, enemy.pos, defRad)
+    ) {
+      mobbingFighters += 1;
+    }
+  }
   const hpRatio = enemy.hp / Math.max(1, enemy.maxHp);
   return mobbingFighters >= CONFIG.spiderMobRetreatCount || hpRatio <= CONFIG.spiderLowHpRetreatThreshold;
 }
@@ -299,10 +326,13 @@ function updateSpiderStarvation(enemy: Enemy): boolean {
 }
 
 function creditSpiderKill(world: World, enemy: Enemy): void {
-  const fighters = world.ants.filter(
-    (ant) => ant.layer === "surface" && ant.state === "fight" && distance(ant.pos, enemy.pos) <= CONFIG.defenseRadius
-  );
-  const creditedColonies = new Set(fighters.map((ant) => ant.colonyId));
+  const creditedColonies = new Set<string>();
+  const defRad = CONFIG.defenseRadius;
+  for (const ant of world.ants) {
+    if (ant.layer === "surface" && ant.state === "fight" && isWithinRadius(ant.pos, enemy.pos, defRad)) {
+      creditedColonies.add(ant.colonyId);
+    }
+  }
   for (const colony of world.colonies ?? []) {
     if (creditedColonies.has(colony.id)) {
       colony.fitness.spidersKilled += 1;
@@ -332,17 +362,17 @@ export function updateEnemies(world: World): void {
       continue;
     }
 
+    const liveAntsCount = liveAntCount(world);
     enemy.hunger += CONFIG.spiderHungerPerTick;
     updateSpiderFitness(world);
     if (isSpiderUnderPressure(world, enemy)) {
       spiderModes.delete(enemy.id);
     }
-    moveSpider(world, enemy);
+    moveSpider(world, enemy, liveAntsCount);
     const hungry = enemy.hunger >= CONFIG.spiderHungryThreshold;
     const attackRadius = hungry ? CONFIG.spiderHungryAttackRadius : CONFIG.spiderAttackRadius;
     const damage = hungry ? CONFIG.spiderHungryDamage : CONFIG.spiderDamagePerTick;
 
-    const liveAntsCount = world.ants.filter((a) => a.state !== "dead").length;
     const isStartPeriod = liveAntsCount <= 10;
 
     for (const ant of world.ants) {
@@ -350,7 +380,7 @@ export function updateEnemies(world: World): void {
         continue;
       }
 
-      if (!isStartPeriod && distance(ant.pos, enemy.pos) <= attackRadius) {
+      if (!isStartPeriod && isWithinRadius(ant.pos, enemy.pos, attackRadius)) {
         const hadEnergy = ant.energy > 0;
         ant.energy -= damage;
         if (ant.energy <= 0) {
