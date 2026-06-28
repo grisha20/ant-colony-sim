@@ -310,8 +310,7 @@ export function moveFighting(world: World, ant: Ant): boolean {
   }
 
   const enemy = world.enemies[nearest.index];
-  const enemyDistance = distance(ant.pos, enemy.pos);
-  if (enemyDistance <= CONFIG.spiderAttackRadius) {
+  if (nearest.distance <= CONFIG.spiderAttackRadius) {
     dropCarriedFood(world, ant);
     ant.state = "fight";
     ant.heading = normalize({ x: enemy.pos.x - ant.pos.x, y: enemy.pos.y - ant.pos.y });

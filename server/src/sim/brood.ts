@@ -7,6 +7,16 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function distanceSq(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy;
+}
+
+function isWithinRadius(a: { x: number; y: number }, b: { x: number; y: number }, radius: number): boolean {
+  return distanceSq(a, b) <= radius * radius;
+}
+
 function hasNearbyFeeder(world: World, broodId: string): boolean {
   const brood = world.underground.brood.find((item) => item.id === broodId);
   if (!brood) {
@@ -18,7 +28,7 @@ function hasNearbyFeeder(world: World, broodId: string): boolean {
       ant.layer === "underground" &&
       ant.state === "feed" &&
       ant.broodId === broodId &&
-      Math.hypot(ant.pos.x - brood.pos.x, ant.pos.y - brood.pos.y) <= CONFIG.undergroundNodeRadius
+      isWithinRadius(ant.pos, brood.pos, CONFIG.undergroundNodeRadius)
   );
 }
 
@@ -66,10 +76,10 @@ function nearestChamberPos(world: World, room: UndergroundRoom): { x: number; y:
       if (tile.type !== "chamber" || tile.roomId !== room.id) {
         continue;
       }
-      const dist = Math.hypot(x + 0.5 - target.x, y + 0.5 - target.y);
-      if (dist < bestDistance) {
+      const distSq = distanceSq({ x: x + 0.5, y: y + 0.5 }, target);
+      if (distSq < bestDistance) {
         best = { x: x + 0.5, y: y + 0.5 };
-        bestDistance = dist;
+        bestDistance = distSq;
       }
     }
   }
@@ -79,8 +89,8 @@ function nearestChamberPos(world: World, room: UndergroundRoom): { x: number; y:
 function nurseryDropPos(world: World): { x: number; y: number } | null {
   const rooms = world.underground.rooms
     .filter((room) => room.type === "nursery" && room.used < room.capacity)
-    .sort((a, b) => Math.hypot(roomCenter(a).x - world.underground.queenChamber.x, roomCenter(a).y - world.underground.queenChamber.y) -
-      Math.hypot(roomCenter(b).x - world.underground.queenChamber.x, roomCenter(b).y - world.underground.queenChamber.y));
+    .sort((a, b) => distanceSq(roomCenter(a), world.underground.queenChamber) -
+      distanceSq(roomCenter(b), world.underground.queenChamber));
 
   for (const room of rooms) {
     const pos = nearestChamberPos(world, room);
@@ -226,7 +236,7 @@ export function updateQueen(world: World): void {
       brood.stage === "egg" &&
       brood.location === "queen" &&
       !brood.isPrincess &&
-      Math.hypot(brood.pos.x - underground.queenChamber.x, brood.pos.y - underground.queenChamber.y) <= CONFIG.undergroundNodeRadius * 2
+      isWithinRadius(brood.pos, underground.queenChamber, CONFIG.undergroundNodeRadius * 2)
   );
   const eggRoomHasAnyChamber = chamberCapacity(world, "room-egg") > 0;
   const crowdedEggs = eggRoomHasAnyChamber ? Math.max(0, eggsNearQueen.length - CONFIG.queenEggComfortLimit) : 0;

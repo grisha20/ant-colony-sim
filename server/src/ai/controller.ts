@@ -40,20 +40,25 @@ function surfaceFoodValue(source: { amount: number; kind?: string }): number {
   return source.amount;
 }
 
+function isWithinRadius(a: { x: number; y: number }, b: { x: number; y: number }, radius: number): boolean {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy <= radius * radius;
+}
+
 export function computeDirectives(world: World, genome: Genome): ColonyDirectives {
   const workerCount = Math.max(1, world.ants.length);
   const fullStoragePressure = world.underground.foodStorage >= CONFIG.queenMinFoodReserve * 2 ? 0.85 : 1;
   const surfaceFood = [...world.surface.foodSources, ...world.surface.carrion].reduce((total, source) => total + Math.max(0, surfaceFoodValue(source)), 0);
   const hasSurfaceFood = surfaceFood > 0;
   const hasBrood = world.underground.brood.length > 0;
-  const nearestSpiderDistance = world.enemies.reduce((nearest, enemy) => {
+  const spiderNearNest = world.enemies.some((enemy) => {
     if (enemy.type !== "spider" || enemy.hp <= 0) {
-      return nearest;
+      return false;
     }
 
-    return Math.min(nearest, Math.hypot(enemy.pos.x - world.surface.entrance.x, enemy.pos.y - world.surface.entrance.y));
-  }, Number.POSITIVE_INFINITY);
-  const spiderNearNest = nearestSpiderDistance <= CONFIG.spiderNearNestRadius;
+    return isWithinRadius(enemy.pos, world.surface.entrance, CONFIG.spiderNearNestRadius);
+  });
   const nurseTarget = hasBrood ? Math.min(CONFIG.maxNurses, workerCount) : 0;
   const rawActiveTarget = hasSurfaceFood
     ? Math.max(CONFIG.minForagers, workerCount - nurseTarget)

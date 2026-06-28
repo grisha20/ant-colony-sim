@@ -49,15 +49,23 @@ const MAX_SURFACE_FOOD_SOURCES = 40;
 const FOOD_MERGE_RADIUS = 4;
 const LEGACY_ANT_CORPSE_AMOUNT = 16;
 
+function distanceSq(a: { x: number; y: number }, b: { x: number; y: number }): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy;
+}
+
+function isWithinRadius(a: { x: number; y: number }, b: { x: number; y: number }, radius: number): boolean {
+  return distanceSq(a, b) <= radius * radius;
+}
+
 function randomSurfacePosAwayFromNest(minNestDistance: number): { x: number; y: number } {
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const pos = {
       x: 3 + Math.random() * (CONFIG.mapWidth - 6),
       y: 3 + Math.random() * (CONFIG.mapHeight - 6)
     };
-    const distanceFromNestA = Math.hypot(pos.x - CONFIG.surfaceEntrance.x, pos.y - CONFIG.surfaceEntrance.y);
-    const distanceFromNestB = Math.hypot(pos.x - CONFIG.surfaceEntranceB.x, pos.y - CONFIG.surfaceEntranceB.y);
-    if (distanceFromNestA >= minNestDistance && distanceFromNestB >= minNestDistance) {
+    if (!isWithinRadius(pos, CONFIG.surfaceEntrance, minNestDistance) && !isWithinRadius(pos, CONFIG.surfaceEntranceB, minNestDistance)) {
       return pos;
     }
   }
@@ -117,15 +125,15 @@ function makeDebrisSources(entrances: Vec2[]): Debris[] {
         y: 3 + Math.random() * (CONFIG.mapHeight - 6)
       };
 
-      let minDistance = Infinity;
+      let minDistanceSq = Infinity;
       for (const ent of entrances) {
-        const dist = Math.hypot(pos.x - ent.x, pos.y - ent.y);
-        if (dist < minDistance) {
-          minDistance = dist;
+        const distSq = distanceSq(pos, ent);
+        if (distSq < minDistanceSq) {
+          minDistanceSq = distSq;
         }
       }
 
-      if (minDistance >= 25) {
+      if (minDistanceSq >= 25 * 25) {
         valid = true;
         break;
       }
@@ -150,16 +158,13 @@ function normalizeSurfaceDebris(surface: Surface, entrances: Vec2[]): Debris[] {
 
   const kept = new Map<string, Debris>();
   for (const item of debris) {
-    let nearestEntranceDistance = Number.POSITIVE_INFINITY;
+    let nearestEntranceDistanceSq = Number.POSITIVE_INFINITY;
     for (const entrance of entrances) {
-      nearestEntranceDistance = Math.min(
-        nearestEntranceDistance,
-        Math.hypot(item.pos.x - entrance.x, item.pos.y - entrance.y)
-      );
+      nearestEntranceDistanceSq = Math.min(nearestEntranceDistanceSq, distanceSq(item.pos, entrance));
     }
 
     const bucket = `${Math.floor(item.pos.x / 8)}:${Math.floor(item.pos.y / 8)}:${item.type}`;
-    if (nearestEntranceDistance >= 3 && nearestEntranceDistance <= 24 && !kept.has(bucket)) {
+    if (nearestEntranceDistanceSq >= 3 * 3 && nearestEntranceDistanceSq <= 24 * 24 && !kept.has(bucket)) {
       kept.set(bucket, item);
     }
 
@@ -192,7 +197,7 @@ function mergeFoodSources(sources: FoodSource[]): FoodSource[] {
     for (const existing of merged) {
       if (
         (existing.kind ?? "food") === (source.kind ?? "food") &&
-        Math.hypot(existing.pos.x - source.pos.x, existing.pos.y - source.pos.y) <= FOOD_MERGE_RADIUS
+        isWithinRadius(existing.pos, source.pos, FOOD_MERGE_RADIUS)
       ) {
         target = existing;
         break;
@@ -290,15 +295,15 @@ export function respawnDebris(world: World): void {
         y: 3 + Math.random() * (CONFIG.mapHeight - 6)
       };
 
-      let minDistance = Infinity;
+      let minDistanceSq = Infinity;
       for (const ent of entrances) {
-        const dist = Math.hypot(pos.x - ent.x, pos.y - ent.y);
-        if (dist < minDistance) {
-          minDistance = dist;
+        const distSq = distanceSq(pos, ent);
+        if (distSq < minDistanceSq) {
+          minDistanceSq = distSq;
         }
       }
 
-      if (minDistance >= 25) {
+      if (minDistanceSq >= 25 * 25) {
         valid = true;
         break;
       }
@@ -387,7 +392,7 @@ export function addFoodSource(
     if (
       existing.amount > 0 &&
       (existing.kind ?? "food") === kind &&
-      Math.hypot(existing.pos.x - pos.x, existing.pos.y - pos.y) <= FOOD_MERGE_RADIUS
+      isWithinRadius(existing.pos, pos, FOOD_MERGE_RADIUS)
     ) {
       const total = existing.amount + amount;
       existing.pos = {

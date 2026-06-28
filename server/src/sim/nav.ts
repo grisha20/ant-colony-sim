@@ -22,8 +22,14 @@ export function nodePosition(node: UndergroundNode): Vec2 {
   }
 }
 
-function distance(a: Vec2, b: Vec2): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
+function distanceSq(a: Vec2, b: Vec2): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy;
+}
+
+function isWithinNodeRadius(a: Vec2, b: Vec2): boolean {
+  return distanceSq(a, b) <= CONFIG.undergroundNodeRadius * CONFIG.undergroundNodeRadius;
 }
 
 function isOnSegment(pos: Vec2, a: Vec2, b: Vec2): boolean {
@@ -31,7 +37,7 @@ function isOnSegment(pos: Vec2, a: Vec2, b: Vec2): boolean {
   const ap = { x: pos.x - a.x, y: pos.y - a.y };
   const lengthSq = ab.x * ab.x + ab.y * ab.y;
   if (lengthSq <= 0.001) {
-    return distance(pos, a) <= CONFIG.undergroundNodeRadius;
+    return isWithinNodeRadius(pos, a);
   }
 
   const t = (ap.x * ab.x + ap.y * ab.y) / lengthSq;
@@ -40,14 +46,14 @@ function isOnSegment(pos: Vec2, a: Vec2, b: Vec2): boolean {
   }
 
   const projection = { x: a.x + ab.x * t, y: a.y + ab.y * t };
-  return distance(pos, projection) <= CONFIG.undergroundNodeRadius;
+  return isWithinNodeRadius(pos, projection);
 }
 
 export function nextWaypoint(fromPos: Vec2, destinationNode: UndergroundNode): Vec2 {
   const destination = nodePosition(destinationNode);
   const junction = nodePosition("junction");
 
-  if (distance(fromPos, destination) <= CONFIG.undergroundNodeRadius || destinationNode === "junction") {
+  if (isWithinNodeRadius(fromPos, destination) || destinationNode === "junction") {
     return destination;
   }
 

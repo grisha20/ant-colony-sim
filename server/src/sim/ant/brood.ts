@@ -3,7 +3,7 @@ import { CONFIG } from "../../config";
 import { tileCenter } from "../underground";
 import type { UndergroundNode } from "../nav";
 import type { World } from "../world";
-import { distance, normalize, moveToward } from "./utils";
+import { distance, distanceSq, isWithinRadius, normalize, moveToward } from "./utils";
 import { clampToUnderground, moveUndergroundToNode, moveUndergroundToward } from "./movement";
 import { activeNurseLaborCount, countUndergroundNurses } from "./colony-state";
 
@@ -44,10 +44,10 @@ export function chamberDropPosInRoom(world: World, room: UndergroundRoom): Vec2 
         continue;
       }
       const pos = tileCenter({ x, y });
-      const dist = distance(pos, center);
-      if (dist < bestDistance) {
+      const distSq = distanceSq(pos, center);
+      if (distSq < bestDistance) {
         best = pos;
-        bestDistance = dist;
+        bestDistance = distSq;
       }
     }
   }
@@ -57,7 +57,7 @@ export function chamberDropPosInRoom(world: World, room: UndergroundRoom): Vec2 
 export function roomDropPos(world: World, type: "egg" | "nursery"): Vec2 | null {
   const rooms = world.underground.rooms
     .filter((room) => room.type === type && room.used < room.capacity)
-    .sort((a, b) => distance(roomCenter(a), world.underground.queenChamber) - distance(roomCenter(b), world.underground.queenChamber));
+    .sort((a, b) => distanceSq(roomCenter(a), world.underground.queenChamber) - distanceSq(roomCenter(b), world.underground.queenChamber));
 
   for (const room of rooms) {
     const pos = chamberDropPosInRoom(world, room);
@@ -167,7 +167,7 @@ export function moveCarryingBrood(world: World, ant: Ant): void {
     }
     const pickupNode: UndergroundNode = brood.location === "queen" ? "queenChamber" : "nursery";
     const target = broodTarget(world, brood);
-    if (distance(ant.pos, target) <= CONFIG.undergroundNodeRadius) {
+    if (isWithinRadius(ant.pos, target, CONFIG.undergroundNodeRadius)) {
       brood.carriedBy = ant.id;
       brood.pos = { ...ant.pos };
     } else {
@@ -192,7 +192,7 @@ export function moveCarryingBrood(world: World, ant: Ant): void {
     return;
   }
 
-  if (distance(ant.pos, targetDropPos) <= CONFIG.undergroundNodeRadius) {
+  if (isWithinRadius(ant.pos, targetDropPos, CONFIG.undergroundNodeRadius)) {
     brood.location = targetLocation;
     brood.pos = { ...targetDropPos };
       brood.carriedBy = undefined;
@@ -223,9 +223,9 @@ export function moveFeedingBrood(world: World, ant: Ant): void {
     return;
   }
 
-  if (distance(ant.pos, world.underground.nursery) > CONFIG.undergroundNodeRadius) {
+  if (!isWithinRadius(ant.pos, world.underground.nursery, CONFIG.undergroundNodeRadius)) {
     moveUndergroundToNode(world, ant, "nursery");
-  } else if (distance(ant.pos, brood.pos) > 2) {
+  } else if (!isWithinRadius(ant.pos, brood.pos, 2)) {
     moveToward(ant, brood.pos, CONFIG.workerUndergroundSpeed);
     clampToUnderground(ant, world);
   } else {

@@ -72,12 +72,12 @@ export function restUnderground(world: World, ant: Ant): void {
     guardQueen(world, ant);
     return;
   }
-  if (distance(ant.pos, target) <= 0.8) {
+  if (isWithinRadius(ant.pos, target, 0.8)) {
     return;
   }
 
   const nodePos = node === "barracksA" ? world.underground.barracksA : world.underground.barracksB;
-  if (distance(ant.pos, nodePos) <= CONFIG.undergroundNodeRadius) {
+  if (isWithinRadius(ant.pos, nodePos, CONFIG.undergroundNodeRadius)) {
     moveUndergroundToward(world, ant, target, CONFIG.workerUndergroundSpeed * 0.35);
     clampToUnderground(ant, world);
     return;
@@ -89,7 +89,7 @@ export function restUnderground(world: World, ant: Ant): void {
 export function guardQueen(world: World, ant: Ant): void {
   ant.state = "idle";
   ant.job = "idle";
-  if (distance(ant.pos, world.underground.queenChamber) <= CONFIG.undergroundNodeRadius) {
+  if (isWithinRadius(ant.pos, world.underground.queenChamber, CONFIG.undergroundNodeRadius)) {
     return;
   }
 
@@ -151,12 +151,12 @@ export function stepUnderground(world: World, ant: Ant): void {
   if (ant.state === "deposit" || ant.carrying > 0) {
     if (!hasDugRoom(world, "storage") || !isDugPos(world, world.underground.storage)) {
       ant.state = "deposit";
-      if (distance(ant.pos, world.underground.queenChamber) > CONFIG.undergroundNodeRadius) {
+      if (!isWithinRadius(ant.pos, world.underground.queenChamber, CONFIG.undergroundNodeRadius)) {
         moveUndergroundToNode(world, ant, "queenChamber");
       }
       return;
     }
-    if (distance(ant.pos, world.underground.storage) <= CONFIG.undergroundNodeRadius) {
+    if (isWithinRadius(ant.pos, world.underground.storage, CONFIG.undergroundNodeRadius)) {
       world.underground.foodStorage += ant.carrying;
       world.fitness.totalFoodDeposited += ant.carrying;
       ant.carrying = 0;

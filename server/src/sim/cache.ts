@@ -1,10 +1,6 @@
-import type { Ant, Vec2 } from "../../../shared/types";
+import type { Ant } from "../../../shared/types";
 import { CONFIG } from "../config";
 import type { World } from "./world";
-
-function distance(a: Vec2, b: Vec2): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
 
 function numericAntId(id: string): number {
   const numericId = Number(id.replace("ant-", ""));

@@ -5,6 +5,12 @@ const MAX_STORAGE_ROOMS = 8;
 
 let nextBroodId = 1;
 
+function distanceSq(a: Vec2, b: Vec2): number {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return dx * dx + dy * dy;
+}
+
 function withJitter(pos: Vec2, radius = 3): Vec2 {
   return {
     x: pos.x + (Math.random() - 0.5) * radius,
@@ -405,10 +411,10 @@ function nearestDugTileTo(underground: Underground, target: Vec2): Vec2 {
       if (!isDugTile(underground, x, y)) {
         continue;
       }
-      const dist = Math.hypot(x + 0.5 - target.x, y + 0.5 - target.y);
-      if (dist < bestDistance) {
+      const distSq = distanceSq({ x: x + 0.5, y: y + 0.5 }, target);
+      if (distSq < bestDistance) {
         best = { x, y };
-        bestDistance = dist;
+        bestDistance = distSq;
       }
     }
   }
@@ -689,9 +695,10 @@ function expansionTargetTiles(underground: Underground, room: UndergroundRoom): 
     tiles.push({ x: minX, y }, { x: maxX, y });
   }
 
+  const center = roomCenter(room);
   return uniqueTiles(tiles)
     .filter((tile) => inBounds(underground.grid, tile.x, tile.y) && underground.grid[tile.y]?.[tile.x]?.type === "soil")
-    .sort((a, b) => Math.hypot(a.x - roomCenter(room).x, a.y - roomCenter(room).y) - Math.hypot(b.x - roomCenter(room).x, b.y - roomCenter(room).y))
+    .sort((a, b) => distanceSq(a, center) - distanceSq(b, center))
     .slice(0, CONFIG.roomExpandMaxTiles);
 }
 

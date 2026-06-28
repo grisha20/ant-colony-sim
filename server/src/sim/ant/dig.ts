@@ -2,7 +2,7 @@ import type { Ant, Vec2 } from "../../../../shared/types";
 import { CONFIG } from "../../config";
 import { completeDigTile, findDigTarget } from "../underground";
 import type { World } from "../world";
-import { distance, normalize } from "./utils";
+import { isWithinRadius, normalize } from "./utils";
 import { moveUndergroundToNode, moveUndergroundToward } from "./movement";
 import { activeDigLaborCount, countUndergroundDiggers } from "./colony-state";
 
@@ -27,7 +27,7 @@ export function moveCarryingDirt(world: World, ant: Ant): boolean {
   ant.state = "carryDirt";
   ant.job = "carryDirt";
   ant.carryingDirt = true;
-  if (distance(ant.pos, world.underground.entrance) <= CONFIG.undergroundNodeRadius) {
+  if (isWithinRadius(ant.pos, world.underground.entrance, CONFIG.undergroundNodeRadius)) {
     clearDigAssignment(ant);
     ant.dirtLoad = 0;
     ant.state = "idle";
@@ -69,7 +69,7 @@ export function moveDigging(world: World, ant: Ant): boolean {
 
   ant.state = "dig";
   ant.job = "dig";
-  if (distance(ant.pos, target.standPos) > 0.55) {
+  if (!isWithinRadius(ant.pos, target.standPos, 0.55)) {
     moveUndergroundToward(world, ant, target.standPos);
     return true;
   }
