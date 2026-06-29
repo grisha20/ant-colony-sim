@@ -3,6 +3,7 @@ import { CONFIG } from "../config";
 
 export function createColony(
   id: string,
+  foundedTick: number,
   generation: number,
   generationsRun: number,
   bestFitness: number,
@@ -11,6 +12,7 @@ export function createColony(
 ): Colony {
   return {
     id,
+    foundedTick,
     food: CONFIG.startingFoodStorage,
     population: {
       workers: CONFIG.startingWorkers,

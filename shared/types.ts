@@ -140,6 +140,7 @@ export type Underground = {
 
 export type Colony = {
   id: string;
+  foundedTick: number;
   food: number;
   population: {
     workers: number;

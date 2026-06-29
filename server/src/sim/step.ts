@@ -119,7 +119,8 @@ function restartColonyRuntime(world: World, colony: ColonyRuntime): void {
     colony.color,
     colony.surfaceEntrance,
     colony.genomeState,
-    world.spiderGenomeState
+    world.spiderGenomeState,
+    world.tick
   );
   Object.assign(colony, fresh);
 }

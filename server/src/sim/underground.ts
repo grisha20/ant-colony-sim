@@ -1083,7 +1083,7 @@ export function createUnderground(colonyId = "colony-1"): Underground {
     storage,
     barracksA,
     barracksB,
-    princesses: [],
+    princesses: [{ id: `${colonyId}-starting-princess`, pos: { ...queenChamber } }],
     ants: []
   };
 }

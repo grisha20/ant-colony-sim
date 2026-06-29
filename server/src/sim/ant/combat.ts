@@ -17,6 +17,14 @@ import { isColonyStarving, isColonyWarHungry } from "./colony-state";
 
 const combatQueryScratch: Ant[] = [];
 
+function isColonyInGrace(world: World, colonyId: string): boolean {
+  const colony = world.colonies.find((item) => item.id === colonyId);
+  if (!colony) {
+    return false;
+  }
+  return world.tick - (colony.colony.foundedTick ?? 0) < CONFIG.colonyGraceTicks;
+}
+
 export function isThreateningSpider(world: World, spiderIndex: number): boolean {
   const enemy = world.enemies[spiderIndex];
   if (!enemy || enemy.type !== "spider" || enemy.hp <= 0) {
@@ -78,6 +86,9 @@ export function enemyColonyAnts(world: World, ant: Ant): Ant[] {
     if (colony.id === ant.colonyId) {
       continue;
     }
+    if (isColonyInGrace(world, colony.id)) {
+      continue;
+    }
     for (let i = 0; i < colony.ants.length; i += 1) {
       const other = colony.ants[i];
       if (other.layer === "surface" && other.state !== "dead") {
@@ -92,6 +103,9 @@ export function nearestEnemyAnt(world: World, ant: Ant): { ant: Ant; distance: n
   let nearest: { ant: Ant; distance: number } | null = null;
   for (const colony of world.colonies ?? []) {
     if (colony.id === ant.colonyId) {
+      continue;
+    }
+    if (isColonyInGrace(world, colony.id)) {
       continue;
     }
     for (let i = 0; i < colony.ants.length; i += 1) {
@@ -112,6 +126,9 @@ export function nearestEnemyNest(world: World, ant: Ant): Vec2 | null {
   let nearest: { pos: Vec2; distance: number } | null = null;
   for (const colony of world.colonies ?? []) {
     if (colony.id === ant.colonyId) {
+      continue;
+    }
+    if (isColonyInGrace(world, colony.id)) {
       continue;
     }
     const nestDistance = distance(ant.pos, colony.surfaceEntrance);

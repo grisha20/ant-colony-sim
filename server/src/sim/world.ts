@@ -496,10 +496,12 @@ export function createColonyRuntime(
   color: "dark" | "red",
   surfaceEntrance: Vec2,
   genomeState: GenomeState,
-  spiderGenomeState: SpiderGenomeState
+  spiderGenomeState: SpiderGenomeState,
+  foundedTick = 0
 ): ColonyRuntime {
   const colony = createColony(
     id,
+    foundedTick,
     genomeState.current.generation,
     genomeState.generationsRun,
     genomeState.bestFitness,
@@ -676,6 +678,7 @@ export function worldFromSnapshot(
       underground,
       colony: {
         ...colonySnapshot.colony,
+        foundedTick: colonySnapshot.colony.foundedTick ?? 0,
         generation: genomeStates[index]?.current.generation ?? genomeState.current.generation,
         generationsRun: genomeStates[index]?.generationsRun ?? genomeState.generationsRun,
         bestFitness: genomeStates[index]?.bestFitness ?? genomeState.bestFitness,
