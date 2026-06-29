@@ -32,9 +32,13 @@ class Profiler {
     const now = Date.now();
     if (now - this.lastReportTime >= 10000) {
       console.log("=== PERFORMANCE REPORT ===");
-      for (const [name, data] of Object.entries(this.stats)) {
+      const stepTotal = this.stats.step_total;
+      const stepTotalMs = stepTotal?.totalMs ?? 0;
+      const entries = Object.entries(this.stats).sort((a, b) => b[1].totalMs - a[1].totalMs);
+      for (const [name, data] of entries) {
         const avg = data.count > 0 ? (data.totalMs / data.count).toFixed(3) : "0.000";
-        console.log(`${name.padEnd(25)}: avg ${avg.padStart(7)}ms (total ${data.totalMs.toFixed(1).padStart(7)}ms, count ${data.count})`);
+        const share = stepTotalMs > 0 ? ((data.totalMs / stepTotalMs) * 100).toFixed(1) : "0.0";
+        console.log(`${name.padEnd(32)} avg ${avg.padStart(7)}ms | ${share.padStart(5)}% step_total | total ${data.totalMs.toFixed(1).padStart(7)}ms | count ${data.count}`);
       }
       console.log("==========================");
       this.stats = {};

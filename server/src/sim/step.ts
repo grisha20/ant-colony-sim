@@ -139,45 +139,51 @@ function evolveAfterQueenDeath(world: World, colony: ColonyRuntime): void {
 export function step(world: World): void {
   world.tick += 1;
 
-  respawnCarrion(world);
-  growFoodSources(world);
-  respawnDebris(world);
+  profiler.measure("phase.resources", () => {
+    respawnCarrion(world);
+    growFoodSources(world);
+    respawnDebris(world);
+  });
   if (world.tick % 5 === 0) {
-    scentFoodSources(world);
+    profiler.measure("phase.scentFoodSources", () => scentFoodSources(world));
   }
 
-  for (const colony of world.colonies) {
-    const scopedWorld = colonyWorldView(world, colony);
-    if (colony.underground.brood.some((brood) => brood.stage === "egg" && brood.location === "queen")) {
-      planEggRoomIfNeeded(colony.underground);
-    }
-    if (colony.underground.brood.some((brood) => brood.stage === "egg" && brood.location === "egg")) {
-      planNurseryIfNeeded(colony.underground);
-    }
-    refreshDigTasks(colony.underground);
-    colony.directives = computeDirectives(scopedWorld, colony.genomeState.current);
-    updateTickCache(scopedWorld);
-    profiler.measure("stepAnt", () => {
-      for (const ant of colony.ants) {
-        stepAnt(scopedWorld, ant);
+  profiler.measure("phase.colonies.step", () => {
+    for (const colony of world.colonies) {
+      const scopedWorld = colonyWorldView(world, colony);
+      if (colony.underground.brood.some((brood) => brood.stage === "egg" && brood.location === "queen")) {
+        planEggRoomIfNeeded(colony.underground);
       }
-    });
-  }
+      if (colony.underground.brood.some((brood) => brood.stage === "egg" && brood.location === "egg")) {
+        planNurseryIfNeeded(colony.underground);
+      }
+      refreshDigTasks(colony.underground);
+      colony.directives = computeDirectives(scopedWorld, colony.genomeState.current);
+      updateTickCache(scopedWorld);
+      profiler.measure("stepAnt", () => {
+        for (const ant of colony.ants) {
+          stepAnt(scopedWorld, ant);
+        }
+      });
+    }
+  });
 
   syncWorldLegacyFields(world);
-  updateWorldSurfaceCache(world);
-  updateEnemies(world);
+  profiler.measure("phase.updateWorldSurfaceCache", () => updateWorldSurfaceCache(world));
+  profiler.measure("phase.updateEnemies", () => updateEnemies(world));
 
-  for (const colony of world.colonies) {
-    const scopedWorld = colonyWorldView(world, colony);
-    updateQueen(scopedWorld);
-    updateBrood(scopedWorld);
-    refreshDigTasks(colony.underground);
-    removeDeadAndSyncLayerLists(world, colony);
-    updateFitness(scopedWorld);
-    evolveAfterQueenDeath(world, colony);
-    syncColonyStatsForRuntime(colony);
-  }
+  profiler.measure("phase.colonies.after", () => {
+    for (const colony of world.colonies) {
+      const scopedWorld = colonyWorldView(world, colony);
+      updateQueen(scopedWorld);
+      updateBrood(scopedWorld);
+      refreshDigTasks(colony.underground);
+      removeDeadAndSyncLayerLists(world, colony);
+      updateFitness(scopedWorld);
+      evolveAfterQueenDeath(world, colony);
+      syncColonyStatsForRuntime(colony);
+    }
+  });
 
   if (world.tick % 4 === 0) {
     const evap4 = Math.pow(CONFIG.pheromoneEvaporation, 4);

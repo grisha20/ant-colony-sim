@@ -11,7 +11,8 @@
     "check": "npm run check -w server && npm run check -w client",
     "reset": "node -e \"require('node:fs').rmSync('snapshot.json',{force:true})\"",
     "stats:snapshot": "tsx server/src/bench/snapshotStats.ts",
-    "bench:server": "tsx server/src/bench/serverStep.ts"
+    "bench:server": "tsx server/src/bench/serverStep.ts",
+    "bench:crowd": "tsx server/src/bench/crowdBench.ts"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

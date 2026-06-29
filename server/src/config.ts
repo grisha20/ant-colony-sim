@@ -5,6 +5,7 @@ const cwdName = path.basename(process.cwd()).toLowerCase();
 export const CONFIG = {
   // Network.
   wsPort: Number(process.env.PORT ?? 8787),
+  broadcastIntervalMs: 100,
 
   // The server is authoritative and advances the world 10 times per second.
   tickMs: 100,
