@@ -26,10 +26,10 @@ export const CONFIG = {
     path.resolve(process.cwd(), cwdName === "server" ? ".." : ".", "spider_genome.json"),
 
   // Surface is the only true grid in the first step.
-  mapWidth: 340,
-  mapHeight: 210,
-  surfaceEntrance: { x: 85, y: 105 },
-  surfaceEntranceB: { x: 255, y: 105 },
+  mapWidth: 480,
+  mapHeight: 300,
+  surfaceEntrance: { x: 120, y: 150 },
+  surfaceEntranceB: { x: 360, y: 150 },
 
   // Underground still keeps the old nav nodes, plus a new diggable grid layer.
   undergroundWidth: 140,
@@ -67,7 +67,7 @@ export const CONFIG = {
   startingEggs: 2,
   startingLarvae: 0,
   startingFoodStorage: 28,
-  nestCapacity: 80,
+  nestCapacity: 300,
 
   // Worker movement and state-machine balance.
   workerSurfaceSpeed: 1.05,
@@ -125,7 +125,7 @@ export const CONFIG = {
   queenStressDirtyEggTicks: 50,
   queenStressReliefPerTick: 2,
   queenHighStressDeathChance: 0.01,
-  queenMaxAge: 60000,
+  queenMaxAge: 8000,
   princessGrowthMult: 3,
   princessChance: 0.05,
   maxPrincesses: 3,
@@ -151,7 +151,7 @@ export const CONFIG = {
 
   // Player click on surface creates a finite food pile with this amount.
   playerFoodAmount: 80,
-  carrionCount: 4,
+  carrionCount: 8,
   carrionAmount: 40,
   carrionRespawnEveryTicks: 2000,
   antCorpseFood: 1.5,
@@ -161,7 +161,7 @@ export const CONFIG = {
   carrionDecayFraction: 0.04,
   foodGrowEveryTicks: 450,
   foodGrowAmount: 28,
-  maxFoodSources: 14,
+  maxFoodSources: 28,
 
   // Surface spider: a wandering danger that becomes food only when the starving colony attacks it.
   spiderMaxHp: 1400,
