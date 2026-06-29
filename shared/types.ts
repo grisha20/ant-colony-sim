@@ -80,6 +80,7 @@ export type Ant = {
   role: "worker";
   strength: number;
   job?: "forage" | "nurse" | "dig" | "carryDirt" | "idle";
+  forageRole?: "scout" | "forager";
   layer: Layer;
   state: AntState;
   pos: Vec2;
@@ -94,6 +95,7 @@ export type Ant = {
   digStandPos?: Vec2;
   digProgress?: number;
   carryingDebris?: "pebble" | "leaf" | null;
+  foundFoodSourceId?: string;
   surfaceExitCooldown?: number;
   undergroundExitCooldown?: number;
 };
@@ -141,9 +143,13 @@ export type Underground = {
 export type Colony = {
   id: string;
   foundedTick: number;
+  knownFood: { id: string; pos: Vec2; lastSeenTick: number }[];
+  activeFoodTargetId?: string;
   food: number;
   population: {
     workers: number;
+    scouts: number;
+    nurses: number;
     eggs: number;
     larvae: number;
   };

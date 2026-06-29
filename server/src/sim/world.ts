@@ -510,6 +510,14 @@ export function createColonyRuntime(
   );
   const underground = createUnderground(id);
   const ants = Array.from({ length: CONFIG.startingWorkers }, () => createWorkerAnt(underground.queenChamber, "underground", id));
+  for (let index = 0; index < ants.length; index += 1) {
+    if (index < CONFIG.startingScouts) {
+      ants[index].job = "forage";
+      ants[index].forageRole = "scout";
+    } else if (index < CONFIG.startingScouts + CONFIG.startingNurses) {
+      ants[index].job = "nurse";
+    }
+  }
   underground.ants = ants.map((ant) => ant.id);
   const runtime: ColonyRuntime = {
     id,
@@ -554,6 +562,8 @@ export function syncColonyStatsForRuntime(runtime: ColonyRuntime): void {
   syncColonyStats(
     runtime.colony,
     runtime.ants.length,
+    runtime.ants.filter((ant) => ant.forageRole === "scout" && ant.state !== "dead").length,
+    runtime.ants.filter((ant) => ant.job === "nurse" && ant.state !== "dead").length,
     runtime.underground.brood.filter((brood) => brood.stage === "egg").length,
     runtime.underground.brood.filter((brood) => brood.stage === "larva").length,
     runtime.underground.foodStorage,
@@ -678,7 +688,14 @@ export function worldFromSnapshot(
       underground,
       colony: {
         ...colonySnapshot.colony,
+        population: {
+          ...colonySnapshot.colony.population,
+          scouts: colonySnapshot.colony.population.scouts ?? 0,
+          nurses: colonySnapshot.colony.population.nurses ?? 0
+        },
         foundedTick: colonySnapshot.colony.foundedTick ?? 0,
+        knownFood: colonySnapshot.colony.knownFood ?? [],
+        activeFoodTargetId: colonySnapshot.colony.activeFoodTargetId,
         generation: genomeStates[index]?.current.generation ?? genomeState.current.generation,
         generationsRun: genomeStates[index]?.generationsRun ?? genomeState.generationsRun,
         bestFitness: genomeStates[index]?.bestFitness ?? genomeState.bestFitness,

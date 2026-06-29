@@ -239,7 +239,15 @@ export function updateQueen(world: World): void {
       isWithinRadius(brood.pos, underground.queenChamber, CONFIG.undergroundNodeRadius * 2)
   );
   const eggRoomHasAnyChamber = chamberCapacity(world, "room-egg") > 0;
-  const crowdedEggs = eggRoomHasAnyChamber ? Math.max(0, eggsNearQueen.length - CONFIG.queenEggComfortLimit) : 0;
+  const nurseCareNearQueen = world.ants.filter(
+    (ant) =>
+      ant.layer === "underground" &&
+      ant.state !== "dead" &&
+      ant.job === "nurse" &&
+      isWithinRadius(ant.pos, underground.queenChamber, CONFIG.undergroundNodeRadius * 2)
+  ).length;
+  const comfortLimit = CONFIG.queenEggComfortLimit + nurseCareNearQueen * 3;
+  const crowdedEggs = eggRoomHasAnyChamber ? Math.max(0, eggsNearQueen.length - comfortLimit) : 0;
   underground.queen.stress = clamp(
     underground.queen.stress + (crowdedEggs > 0 ? CONFIG.queenStressPerTick * crowdedEggs : -CONFIG.queenStressReliefPerTick),
     0,

@@ -1,5 +1,6 @@
 import type { Ant, Vec2 } from "../../../../shared/types";
 import { CONFIG } from "../../config";
+import { profiler } from "../../utils/profiler";
 import { tickCache } from "../cache";
 import type { UndergroundNode } from "../nav";
 import { isDugTile, tileCenter } from "../underground";
@@ -63,14 +64,14 @@ export function moveSurfaceToward(world: World, ant: Ant, target: Vec2, avoidSpi
   let desired = normalize({ x: target.x - ant.pos.x, y: target.y - ant.pos.y });
 
   if (avoidSpiders) {
-    desired = applySpiderAvoidance(world, ant.pos, desired, speed);
+    desired = profiler.measure("stepAnt.surface.spiderAvoid", () => applySpiderAvoidance(world, ant.pos, desired, speed));
   }
 
   if (allowSeparation) {
     const dist = distance(ant.pos, target);
     const isTargetEntrance = target.x === world.surface.entrance.x && target.y === world.surface.entrance.y;
     if (!isTargetEntrance || dist > 8.0) {
-      desired = applySeparation(world, ant, desired);
+      desired = profiler.measure("stepAnt.surface.separation", () => applySeparation(world, ant, desired));
     }
   }
 
@@ -83,10 +84,12 @@ export function moveSurfaceToward(world: World, ant: Ant, target: Vec2, avoidSpi
     y: ant.heading.y * (1 - k) + desired.y * k
   });
 
-  ant.heading = direction;
-  ant.pos.x += direction.x * speed;
-  ant.pos.y += direction.y * speed;
-  clampToSurface(ant, world);
+  profiler.measure("stepAnt.surface.move", () => {
+    ant.heading = direction;
+    ant.pos.x += direction.x * speed;
+    ant.pos.y += direction.y * speed;
+    clampToSurface(ant, world);
+  });
 }
 
 export function clampToSurface(ant: Ant, world: World): void {
@@ -409,7 +412,7 @@ export function tryCrossLayer(world: World, ant: Ant): boolean {
     ant.pos = { ...world.surface.entrance };
     ant.heading = fanDirection(randomHeading(), ant.id);
     ant.surfaceExitCooldown = 12;
-    ant.undergroundExitCooldown = 0;
+    ant.undergroundExitCooldown = 6;
     const spawnOffset = CONFIG.entranceRadiusSurface + 0.8;
     ant.pos.x += ant.heading.x * spawnOffset;
     ant.pos.y += ant.heading.y * spawnOffset;

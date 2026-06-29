@@ -51,6 +51,8 @@ appRoot.innerHTML = `
           <div><span>Поколение</span><strong id="colony-a-generation">1</strong></div>
           <div><span>Поколений</span><strong id="colony-a-generations-run">0</strong></div>
           <div><span>Рабочие</span><strong id="colony-a-workers">0</strong></div>
+          <div><span>Разведка</span><strong id="colony-a-scouts">0</strong></div>
+          <div><span>Няньки</span><strong id="colony-a-nurses">0</strong></div>
           <div><span>Склад</span><strong id="colony-a-storage">0</strong></div>
           <div><span>Яйца</span><strong id="colony-a-eggs">0</strong></div>
           <div><span>Личинки</span><strong id="colony-a-larvae">0</strong></div>
@@ -64,6 +66,8 @@ appRoot.innerHTML = `
           <div><span>Поколение</span><strong id="colony-b-generation">1</strong></div>
           <div><span>Поколений</span><strong id="colony-b-generations-run">0</strong></div>
           <div><span>Рабочие</span><strong id="colony-b-workers">0</strong></div>
+          <div><span>Разведка</span><strong id="colony-b-scouts">0</strong></div>
+          <div><span>Няньки</span><strong id="colony-b-nurses">0</strong></div>
           <div><span>Склад</span><strong id="colony-b-storage">0</strong></div>
           <div><span>Яйца</span><strong id="colony-b-eggs">0</strong></div>
           <div><span>Личинки</span><strong id="colony-b-larvae">0</strong></div>
@@ -345,6 +349,8 @@ const colonyNodes = [0, 1].map((index) => {
     generation: document.querySelector<HTMLElement>(`#colony-${key}-generation`),
     generationsRun: document.querySelector<HTMLElement>(`#colony-${key}-generations-run`),
     workers: document.querySelector<HTMLElement>(`#colony-${key}-workers`),
+    scouts: document.querySelector<HTMLElement>(`#colony-${key}-scouts`),
+    nurses: document.querySelector<HTMLElement>(`#colony-${key}-nurses`),
     storage: document.querySelector<HTMLElement>(`#colony-${key}-storage`),
     eggs: document.querySelector<HTMLElement>(`#colony-${key}-eggs`),
     larvae: document.querySelector<HTMLElement>(`#colony-${key}-larvae`),
@@ -390,6 +396,8 @@ const colonyStatNodes = colonyNodes.map((nodes) => ({
   generation: nodes.generation as HTMLElement,
   generationsRun: nodes.generationsRun as HTMLElement,
   workers: nodes.workers as HTMLElement,
+  scouts: nodes.scouts as HTMLElement,
+  nurses: nodes.nurses as HTMLElement,
   storage: nodes.storage as HTMLElement,
   eggs: nodes.eggs as HTMLElement,
   larvae: nodes.larvae as HTMLElement,
@@ -503,6 +511,8 @@ function updateHud(world: WorldSnapshot): void {
       nodes.generation.textContent = "-";
       nodes.generationsRun.textContent = "-";
       nodes.workers.textContent = "-";
+      nodes.scouts.textContent = "-";
+      nodes.nurses.textContent = "-";
       nodes.storage.textContent = "-";
       nodes.eggs.textContent = "-";
       nodes.larvae.textContent = "-";
@@ -516,6 +526,8 @@ function updateHud(world: WorldSnapshot): void {
     nodes.generation.textContent = String(item.colony.generation);
     nodes.generationsRun.textContent = String(item.colony.generationsRun);
     nodes.workers.textContent = String(item.colony.population.workers);
+    nodes.scouts.textContent = String(item.colony.population.scouts ?? 0);
+    nodes.nurses.textContent = String(item.colony.population.nurses ?? 0);
     nodes.storage.textContent = String(Math.floor(item.underground.foodStorage));
     nodes.eggs.textContent = String(item.colony.population.eggs);
     nodes.larvae.textContent = String(item.colony.population.larvae ?? 0);

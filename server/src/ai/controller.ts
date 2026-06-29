@@ -30,16 +30,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function surfaceFoodValue(source: { amount: number; kind?: string }): number {
-  if (source.kind === "antCorpse") {
-    return source.amount * 0.15;
-  }
-  if (source.kind === "carrion") {
-    return source.amount * 0.35;
-  }
-  return source.amount;
-}
-
 function isWithinRadius(a: { x: number; y: number }, b: { x: number; y: number }, radius: number): boolean {
   const dx = a.x - b.x;
   const dy = a.y - b.y;
@@ -49,8 +39,7 @@ function isWithinRadius(a: { x: number; y: number }, b: { x: number; y: number }
 export function computeDirectives(world: World, genome: Genome): ColonyDirectives {
   const workerCount = Math.max(1, world.ants.length);
   const fullStoragePressure = world.underground.foodStorage >= CONFIG.queenMinFoodReserve * 2 ? 0.85 : 1;
-  const surfaceFood = [...world.surface.foodSources, ...world.surface.carrion].reduce((total, source) => total + Math.max(0, surfaceFoodValue(source)), 0);
-  const hasSurfaceFood = surfaceFood > 0;
+  const hasKnownFoodTarget = !!world.colony.activeFoodTargetId;
   const hasBrood = world.underground.brood.length > 0;
   const spiderNearNest = world.enemies.some((enemy) => {
     if (enemy.type !== "spider" || enemy.hp <= 0) {
@@ -60,13 +49,15 @@ export function computeDirectives(world: World, genome: Genome): ColonyDirective
     return isWithinRadius(enemy.pos, world.surface.entrance, CONFIG.spiderNearNestRadius);
   });
   const nurseTarget = hasBrood ? Math.min(CONFIG.maxNurses, workerCount) : 0;
-  const rawActiveTarget = hasSurfaceFood
-    ? Math.max(CONFIG.minForagers, workerCount - nurseTarget)
-    : Math.round(workerCount * CONFIG.scoutFraction);
+  const rawActiveTarget = hasKnownFoodTarget
+    ? Math.max(CONFIG.minForagers, Math.round(workerCount * CONFIG.foragerFraction))
+    : Math.min(CONFIG.maxScouts, Math.max(CONFIG.startingScouts, Math.round(workerCount * CONFIG.scoutFraction)));
+  const maxActiveForagers = hasKnownFoodTarget ? CONFIG.maxForagers : CONFIG.maxScouts;
+  const minActiveForagers = hasKnownFoodTarget ? CONFIG.minForagers : Math.min(CONFIG.startingScouts, workerCount);
   const activeTarget = clamp(
     Math.round(rawActiveTarget * (spiderNearNest ? CONFIG.spiderNearNestPenalty : 1)),
-    Math.min(CONFIG.minForagers, workerCount),
-    Math.min(CONFIG.maxForagers, workerCount)
+    Math.min(minActiveForagers, workerCount),
+    Math.min(maxActiveForagers, workerCount)
   );
   const maxNurses = clamp(
     Math.min(Math.round(workerCount * genome.genes.nurseFraction), nurseTarget),

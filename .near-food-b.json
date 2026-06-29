@@ -1,0 +1,21 @@
+{
+  "current": {
+    "id": "genome-mqzgvwov-lu9yl2",
+    "generation": 1,
+    "genes": {
+      "nurseFraction": 0.2683364795919746,
+      "digFraction": 0.17128276296949901,
+      "queenRearBias": 0.6421831903568557,
+      "forageSpread": 0.10580868977263949,
+      "spiderAttackStorage": 2.0739561378181506,
+      "layReserve": 18.5641083509471,
+      "refuelThreshold": 436.985015148971,
+      "spiderAvoid": 6.380932305278681,
+      "aggression": 0.3501296824153927
+    }
+  },
+  "best": null,
+  "bestFitness": 0,
+  "archive": [],
+  "generationsRun": 0
+}

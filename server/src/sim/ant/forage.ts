@@ -1,5 +1,7 @@
 import type { Ant, Debris, Vec2 } from "../../../../shared/types";
 import { CONFIG } from "../../config";
+import { profiler } from "../../utils/profiler";
+import { activeFoodTarget } from "../foodMemory";
 import type { World } from "../world";
 import { randomHeading } from "../world";
 import { distance, isWithinRadius, normalize, numericAntId } from "./utils";
@@ -21,8 +23,8 @@ import {
 import { hasDugRoom } from "./brood";
 
 export type SurfaceFoodTarget = {
-  source: { pos: Vec2; amount: number; kind?: "food" | "carrion" | "antCorpse" | "spiderCarcass" };
-  list: Array<{ pos: Vec2; amount: number; kind?: "food" | "carrion" | "antCorpse" | "spiderCarcass" }>;
+  source: { id: string; pos: Vec2; amount: number; kind?: "food" | "carrion" | "antCorpse" | "spiderCarcass" };
+  list: Array<{ id: string; pos: Vec2; amount: number; kind?: "food" | "carrion" | "antCorpse" | "spiderCarcass" }>;
   index: number;
 };
 
@@ -47,7 +49,7 @@ export function scoutDirection(world: World, ant: Ant): Vec2 {
   const distFromEntrance = distance(ant.pos, world.surface.entrance);
   if (distFromEntrance < CONFIG.antFoodSightRadius) {
     const away = normalize({ x: ant.pos.x - world.surface.entrance.x, y: ant.pos.y - world.surface.entrance.y });
-    direction = normalize({ x: direction.x + away.x * 1.2, y: direction.y + away.y * 1.2 });
+    direction = normalize({ x: direction.x + away.x * 0.6, y: direction.y + away.y * 0.6 });
   }
   return direction;
 }
@@ -85,6 +87,9 @@ export function pickupFoodIfReached(world: World, ant: Ant, target: SurfaceFoodT
   source.amount = Math.max(0, source.amount - amount);
   ant.energy = CONFIG.maxEnergy;
   ant.carrying = amount;
+  if (ant.forageRole === "scout") {
+    ant.foundFoodSourceId = source.id;
+  }
   ant.state = "carry";
   return true;
 }
@@ -126,7 +131,7 @@ export function moveDiggerHome(world: World, ant: Ant): void {
   tryCrossLayer(world, ant);
 }
 
-export function moveSearching(world: World, ant: Ant): void {
+function moveSearchingLegacy(world: World, ant: Ant): void {
   ant.job = "forage";
   const speed = surfaceMoveSpeed(world, ant);
   const food = nearestAvailableFood(world, ant);
@@ -149,13 +154,17 @@ export function moveSearching(world: World, ant: Ant): void {
   const foodAvailable = hasAvailableSurfaceFood(world);
 
   // Если еды нет, градиент феромонов еды не учитываем (чистая разведка)
-  const gradient = foodAvailable
-    ? world.pheromones.food.sampleGradient(ant.pos.x, ant.pos.y)
-    : { x: 0, y: 0, strength: 0 };
+  const gradient = profiler.measure("stepAnt.surface.pheromoneDirection", () =>
+    foodAvailable
+      ? world.pheromones.food.sampleGradient(ant.pos.x, ant.pos.y)
+      : { x: 0, y: 0, strength: 0 }
+  );
 
-  const density = foodAvailable
-    ? world.pheromones.food.getInterpolated(ant.pos.x, ant.pos.y)
-    : 0;
+  const density = profiler.measure("stepAnt.surface.pheromoneDirection", () =>
+    foodAvailable
+      ? world.pheromones.food.getInterpolated(ant.pos.x, ant.pos.y)
+      : 0
+  );
 
   const jitter = randomHeading();
   const gradientPower = Math.min(2.5, gradient.strength) * CONFIG.pheromoneGradientWeight;
@@ -187,8 +196,10 @@ export function moveSearching(world: World, ant: Ant): void {
       jitter.y * wanderWeight
   });
 
-  const safeDesired = isColonyStarving(world) ? desired : applySpiderAvoidance(world, ant.pos, desired, speed);
-  const finalDesired = applySeparation(world, ant, safeDesired);
+  const safeDesired = isColonyStarving(world)
+    ? desired
+    : profiler.measure("stepAnt.surface.spiderAvoid", () => applySpiderAvoidance(world, ant.pos, desired, speed));
+  const finalDesired = profiler.measure("stepAnt.surface.separation", () => applySeparation(world, ant, safeDesired));
 
   // Плавная интерполяция к желаемому вектору
   let k = 0.18;
@@ -201,17 +212,146 @@ export function moveSearching(world: World, ant: Ant): void {
     y: ant.heading.y * (1 - k) + finalDesired.y * k
   });
 
-  ant.heading = finalDirection;
-  ant.pos.x += finalDirection.x * speed;
-  ant.pos.y += finalDirection.y * speed;
-  clampToSurface(ant, world);
+  profiler.measure("stepAnt.surface.move", () => {
+    ant.heading = finalDirection;
+    ant.pos.x += finalDirection.x * speed;
+    ant.pos.y += finalDirection.y * speed;
+    clampToSurface(ant, world);
+  });
+}
+
+function nearestVisibleFood(world: World, ant: Ant): SurfaceFoodTarget | null {
+  const food = nearestAvailableFood(world, ant);
+  if (!food) {
+    return null;
+  }
+
+  const isSuper = food.source.kind === "spiderCarcass";
+  const sightRadius = isSuper ? CONFIG.superFoodSightRadius : CONFIG.antFoodSightRadius;
+  return isWithinRadius(ant.pos, food.source.pos, sightRadius) ? food : null;
+}
+
+function moveScoutSearching(world: World, ant: Ant): void {
+  const food = nearestVisibleFood(world, ant);
+  if (food && pickupFoodIfReached(world, ant, food)) {
+    return;
+  }
+
+  if (food) {
+    ant.state = "search";
+    moveSurfaceToward(world, ant, food.source.pos, !isColonyStarving(world));
+    return;
+  }
+
+  const speed = surfaceMoveSpeed(world, ant);
+  const jitter = randomHeading();
+  const scout = scoutDirection(world, ant);
+  const desired = normalize({
+    x: scout.x * 1.35 + jitter.x * world.directives.forageWander,
+    y: scout.y * 1.35 + jitter.y * world.directives.forageWander
+  });
+  const safeDesired = isColonyStarving(world)
+    ? desired
+    : profiler.measure("stepAnt.surface.spiderAvoid", () => applySpiderAvoidance(world, ant.pos, desired, speed));
+  const finalDesired = profiler.measure("stepAnt.surface.separation", () => applySeparation(world, ant, safeDesired));
+  const finalDirection = normalize({
+    x: ant.heading.x * 0.82 + finalDesired.x * 0.18,
+    y: ant.heading.y * 0.82 + finalDesired.y * 0.18
+  });
+
+  profiler.measure("stepAnt.surface.move", () => {
+    ant.heading = finalDirection;
+    ant.pos.x += finalDirection.x * speed;
+    ant.pos.y += finalDirection.y * speed;
+    clampToSurface(ant, world);
+  });
+}
+
+function moveAlongFoodTrail(world: World, ant: Ant, targetPos: Vec2, towardFood: boolean): void {
+  const speed = surfaceMoveSpeed(world, ant);
+  const entrance = world.surface.entrance;
+  const route = {
+    x: targetPos.x - entrance.x,
+    y: targetPos.y - entrance.y
+  };
+  const routeLengthSq = Math.max(0.001, route.x * route.x + route.y * route.y);
+  const routeLength = Math.sqrt(routeLengthSq);
+  const routeDir = { x: route.x / routeLength, y: route.y / routeLength };
+  const normal = { x: -routeDir.y, y: routeDir.x };
+  const progress = Math.max(0, Math.min(1, ((ant.pos.x - entrance.x) * route.x + (ant.pos.y - entrance.y) * route.y) / routeLengthSq));
+  const lane = ((numericAntId(ant.id) % 5) - 2) * 0.22;
+  const center = {
+    x: entrance.x + route.x * progress + normal.x * lane,
+    y: entrance.y + route.y * progress + normal.y * lane
+  };
+  const forward = towardFood ? routeDir : { x: -routeDir.x, y: -routeDir.y };
+  const lateral = {
+    x: center.x - ant.pos.x,
+    y: center.y - ant.pos.y
+  };
+  const jitter = randomHeading();
+  let desired = normalize({
+    x: forward.x * 1.45 + lateral.x * 0.26 + jitter.x * 0.035,
+    y: forward.y * 1.45 + lateral.y * 0.26 + jitter.y * 0.035
+  });
+
+  if (!isColonyStarving(world)) {
+    desired = profiler.measure("stepAnt.surface.spiderAvoid", () => applySpiderAvoidance(world, ant.pos, desired, speed));
+  }
+
+  const direction = normalize({
+    x: ant.heading.x * 0.55 + desired.x * 0.45,
+    y: ant.heading.y * 0.55 + desired.y * 0.45
+  });
+
+  profiler.measure("stepAnt.surface.move", () => {
+    ant.heading = direction;
+    ant.pos.x += direction.x * speed;
+    ant.pos.y += direction.y * speed;
+    clampToSurface(ant, world);
+  });
+}
+
+function moveForagerSearching(world: World, ant: Ant): void {
+  const target = activeFoodTarget(world);
+  if (!target) {
+    ant.state = "return";
+    moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world), false);
+    tryCrossLayer(world, ant);
+    return;
+  }
+
+  if (pickupFoodIfReached(world, ant, target)) {
+    return;
+  }
+
+  ant.state = "search";
+  world.pheromones.food.add(ant.pos.x, ant.pos.y, CONFIG.foodPheromoneDeposit * 0.75);
+  moveAlongFoodTrail(world, ant, target.source.pos, true);
+}
+
+export function moveSearching(world: World, ant: Ant): void {
+  ant.job = "forage";
+  world.pheromones.home.add(ant.pos.x, ant.pos.y, CONFIG.homePheromoneDeposit);
+
+  if (ant.forageRole === "scout") {
+    moveScoutSearching(world, ant);
+    return;
+  }
+
+  moveForagerSearching(world, ant);
 }
 
 export function moveCarrying(world: World, ant: Ant): void {
   ant.job = "forage";
   world.pheromones.food.add(ant.pos.x, ant.pos.y, CONFIG.foodPheromoneDeposit);
 
-  moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world), false);
+  const target = ant.forageRole === "forager" ? activeFoodTarget(world) : null;
+  if (target) {
+    moveAlongFoodTrail(world, ant, target.source.pos, false);
+  } else {
+    moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world), false);
+  }
   tryCrossLayer(world, ant);
 }
 

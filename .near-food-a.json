@@ -1,0 +1,21 @@
+{
+  "current": {
+    "id": "genome-mqzgvwot-i6uamt",
+    "generation": 1,
+    "genes": {
+      "nurseFraction": 0.3065877666143854,
+      "digFraction": 0.1710992354960807,
+      "queenRearBias": 0.6738419478633009,
+      "forageSpread": 0.1,
+      "spiderAttackStorage": 2.6813345235498116,
+      "layReserve": 18.404356591452935,
+      "refuelThreshold": 403.41754295829895,
+      "spiderAvoid": 6.434553390528599,
+      "aggression": 0.3236884992303076
+    }
+  },
+  "best": null,
+  "bestFitness": 0,
+  "archive": [],
+  "generationsRun": 0
+}

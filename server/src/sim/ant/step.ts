@@ -1,5 +1,7 @@
 import type { Ant, Vec2 } from "../../../../shared/types";
 import { CONFIG } from "../../config";
+import { profiler } from "../../utils/profiler";
+import { registerScoutFoodReport } from "../foodMemory";
 import { tileCenter } from "../underground";
 import type { UndergroundNode } from "../nav";
 import type { World } from "../world";
@@ -67,7 +69,7 @@ export function restUnderground(world: World, ant: Ant): void {
   const node = restNodeForAnt(ant);
   const target = restTargetForAnt(world, ant, node);
   ant.state = "idle";
-  ant.job = "idle";
+  ant.job = ant.job === "nurse" ? "nurse" : "idle";
   if (!isDugPos(world, target)) {
     guardQueen(world, ant);
     return;
@@ -88,7 +90,7 @@ export function restUnderground(world: World, ant: Ant): void {
 
 export function guardQueen(world: World, ant: Ant): void {
   ant.state = "idle";
-  ant.job = "idle";
+  ant.job = ant.job === "nurse" ? "nurse" : "idle";
   if (isWithinRadius(ant.pos, world.underground.queenChamber, CONFIG.undergroundNodeRadius)) {
     return;
   }
@@ -119,7 +121,7 @@ function isSurfaceExitThreatened(world: World): boolean {
 }
 
 function shouldWaitForExitSlot(world: World, ant: Ant): boolean {
-  const maxConcurrentExits = Math.max(4, Math.min(16, Math.ceil(world.directives.activeTarget / 4)));
+  const maxConcurrentExits = Math.max(1, Math.min(3, Math.ceil(world.directives.activeTarget / 4)));
   const exiting = tickCache.undergroundExitingAnts;
 
   if (exiting.length < maxConcurrentExits) {
@@ -151,12 +153,19 @@ export function stepUnderground(world: World, ant: Ant): void {
   if (ant.state === "deposit" || ant.carrying > 0) {
     if (!hasDugRoom(world, "storage") || !isDugPos(world, world.underground.storage)) {
       ant.state = "deposit";
-      if (!isWithinRadius(ant.pos, world.underground.queenChamber, CONFIG.undergroundNodeRadius)) {
+      if (isWithinRadius(ant.pos, world.underground.queenChamber, CONFIG.undergroundNodeRadius)) {
+        registerScoutFoodReport(world, ant);
+        world.underground.foodStorage += ant.carrying;
+        world.fitness.totalFoodDeposited += ant.carrying;
+        ant.carrying = 0;
+        ant.state = "idle";
+      } else {
         moveUndergroundToNode(world, ant, "queenChamber");
       }
       return;
     }
     if (isWithinRadius(ant.pos, world.underground.storage, CONFIG.undergroundNodeRadius)) {
+      registerScoutFoodReport(world, ant);
       world.underground.foodStorage += ant.carrying;
       world.fitness.totalFoodDeposited += ant.carrying;
       ant.carrying = 0;
@@ -198,6 +207,43 @@ export function stepUnderground(world: World, ant: Ant): void {
   }
 
   if (assignNurseTask(world, ant)) {
+    return;
+  }
+
+  if (ant.job === "nurse") {
+    restUnderground(world, ant);
+    return;
+  }
+
+  if (ant.forageRole === "scout") {
+    if (countActiveAndTransitioningForagers(world) >= world.directives.activeTarget) {
+      restUnderground(world, ant);
+      return;
+    }
+    if (isSurfaceExitThreatened(world) || (ant.undergroundExitCooldown ?? 0) > 0 || shouldWaitForExitSlot(world, ant)) {
+      restUnderground(world, ant);
+      return;
+    }
+    ant.job = "forage";
+    ant.state = "toEntrance";
+    moveUndergroundToNode(world, ant, "entrance");
+    tryCrossLayer(world, ant);
+    return;
+  }
+
+  if (ant.forageRole === "forager") {
+    if (countActiveAndTransitioningForagers(world) >= world.directives.activeTarget) {
+      restUnderground(world, ant);
+      return;
+    }
+    if (isSurfaceExitThreatened(world) || (ant.undergroundExitCooldown ?? 0) > 0 || shouldWaitForExitSlot(world, ant)) {
+      restUnderground(world, ant);
+      return;
+    }
+    ant.job = "forage";
+    ant.state = "toEntrance";
+    moveUndergroundToNode(world, ant, "entrance");
+    tryCrossLayer(world, ant);
     return;
   }
 
@@ -243,7 +289,7 @@ export function stepSurface(world: World, ant: Ant): void {
     ant.surfaceExitCooldown = Math.max(0, (ant.surfaceExitCooldown ?? 0) - 1);
   }
 
-  if (handleEnemyColonyCombat(world, ant)) {
+  if (profiler.measure("stepAnt.surface.combat", () => handleEnemyColonyCombat(world, ant))) {
     return;
   }
 
@@ -257,7 +303,7 @@ export function stepSurface(world: World, ant: Ant): void {
     return;
   }
 
-  if (moveFighting(world, ant)) {
+  if (profiler.measure("stepAnt.surface.combat", () => moveFighting(world, ant))) {
     return;
   }
 

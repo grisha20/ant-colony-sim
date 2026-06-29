@@ -149,7 +149,7 @@ export function moveCarryingBrood(world: World, ant: Ant): void {
   if (!brood) {
     ant.broodId = undefined;
     ant.state = "idle";
-    ant.job = "idle";
+    ant.job = "nurse";
     return;
   }
 
@@ -157,7 +157,7 @@ export function moveCarryingBrood(world: World, ant: Ant): void {
     if (brood.location === "queen" && (!eggRoomHasSpace(world) || !eggDropPos(world))) {
       ant.broodId = undefined;
       ant.state = "idle";
-      ant.job = "idle";
+      ant.job = "nurse";
       return;
     }
     if (brood.location === "nursery" && !hasDugRoom(world, "nursery")) {
@@ -188,7 +188,7 @@ export function moveCarryingBrood(world: World, ant: Ant): void {
   if (!targetDropPos) {
     ant.broodId = undefined;
     ant.state = "idle";
-    ant.job = "idle";
+    ant.job = "nurse";
     return;
   }
 
@@ -198,7 +198,7 @@ export function moveCarryingBrood(world: World, ant: Ant): void {
       brood.carriedBy = undefined;
       ant.broodId = undefined;
       ant.state = "idle";
-      ant.job = "idle";
+      ant.job = "nurse";
       return;
   }
 
@@ -219,7 +219,7 @@ export function moveFeedingBrood(world: World, ant: Ant): void {
   ) {
     ant.broodId = undefined;
     ant.state = "idle";
-    ant.job = "idle";
+    ant.job = "nurse";
     return;
   }
 

@@ -13,9 +13,13 @@ export function createColony(
   return {
     id,
     foundedTick,
+    knownFood: [],
+    activeFoodTargetId: undefined,
     food: CONFIG.startingFoodStorage,
     population: {
       workers: CONFIG.startingWorkers,
+      scouts: CONFIG.startingScouts,
+      nurses: CONFIG.startingNurses,
       eggs: CONFIG.startingEggs,
       larvae: CONFIG.startingLarvae
     },
@@ -36,6 +40,8 @@ export function createColony(
 export function syncColonyStats(
   colony: Colony,
   workerCount: number,
+  scoutCount: number,
+  nurseCount: number,
   eggCount: number,
   larvaCount: number,
   foodStorage: number,
@@ -50,6 +56,8 @@ export function syncColonyStats(
 ): void {
   colony.food = foodStorage;
   colony.population.workers = workerCount;
+  colony.population.scouts = scoutCount;
+  colony.population.nurses = nurseCount;
   colony.population.eggs = eggCount;
   colony.population.larvae = larvaCount;
   colony.queenAlive = queenAlive;

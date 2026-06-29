@@ -1,0 +1,19 @@
+{
+  "current": {
+    "id": "spider-genome-mqzgvwov-wtjt8a",
+    "generation": 1,
+    "genes": {
+      "aggression": 0.6247731730919445,
+      "ambushPreference": 0.30860066065147407,
+      "chaseTriggerDist": 8.638792294833332,
+      "swarmCaution": 3.948142686602104,
+      "entranceAffinity": 0.21153581904435798,
+      "patience": 132.5838403215495,
+      "hungerAggroGain": 0.39560001195823674
+    }
+  },
+  "best": null,
+  "bestFitness": 0,
+  "archive": [],
+  "generationsRun": 0
+}

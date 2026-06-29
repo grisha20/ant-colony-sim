@@ -64,10 +64,10 @@ export const CONFIG = {
   roomExpandCapacityStep: 12,
   roomExpandMaxTiles: 18,
 
-  startingWorkers: 4,
+  startingWorkers: 8,
   startingEggs: 2,
   startingLarvae: 0,
-  startingFoodStorage: 28,
+  startingFoodStorage: 100,
   nestCapacity: 300,
 
   // Worker movement and state-machine balance.
@@ -83,12 +83,12 @@ export const CONFIG = {
   workerMealCost: 0.4,
   // Hungry surface workers return before they are starving, so a failed food trip does not become a death march.
   refuelEnergyThreshold: 420,
-  randomWander: 0.35,
+  randomWander: 0.12,
   defenseRadius: 10,
   defenseMaxHelpers: 6,
   antAlertRange: 10,
   antSpiderSightRadius: 14,
-  antFoodSightRadius: 18,
+  antFoodSightRadius: 7,
   superFoodSightRadius: 45,
   superFoodDirectApproachRange: 35,
   superFoodCombatRadius: 15,
@@ -100,18 +100,20 @@ export const CONFIG = {
   warHungerThreshold: 10,
   comfortableStorage: 120,
   minForagers: 6,
-  maxForagers: 64,
+  foragerFraction: 0.5,
+  maxForagers: 35,
+  scoutCount: 4,
   spiderNearNestPenalty: 0.55,
   spiderNearNestRadius: 18,
 
   // Pheromones live only on surface and are represented as two Float32Array grids.
-  pheromoneEvaporation: 0.986,
+  pheromoneEvaporation: 0.99,
   pheromoneDiffusion: 0.035,
-  foodPheromoneDeposit: 8,
+  foodPheromoneDeposit: 12,
   homePheromoneDeposit: 4,
   foodSourceScent: 16,
-  foodSourceScentRadius: 30,
-  pheromoneGradientWeight: 2.0,
+  foodSourceScentRadius: 45,
+  pheromoneGradientWeight: 3.5,
 
   // Queen and brood lifecycle.
   eggCost: 3,
@@ -145,9 +147,12 @@ export const CONFIG = {
   // Brood work only starts when the colony has enough reserve, so food gathering cannot deadlock.
   nurseMinFoodReserve: 8,
   maxConcurrentNurses: 3,
-  maxNurses: 2,
-  maxDirectiveNurses: 2,
+  maxNurses: 3,
+  maxDirectiveNurses: 3,
   scoutFraction: 0.5,
+  startingScouts: 2,
+  startingNurses: 1,
+  maxScouts: 5,
   foodDirectApproachRange: 12,
 
   // Player click on surface creates a finite food pile with this amount.

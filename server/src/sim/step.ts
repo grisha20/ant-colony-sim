@@ -6,6 +6,7 @@ import { updateTickCache, updateWorldSurfaceCache } from "./cache";
 import { profiler } from "../utils/profiler";
 import { updateBrood, updateQueen } from "./brood";
 import { updateEnemies } from "./enemy";
+import { assignForageRoles, updateColonyFoodMemory } from "./foodMemory";
 import { planEggRoomIfNeeded, planNurseryIfNeeded, refreshDigTasks } from "./underground";
 import {
   addAntCorpse,
@@ -113,6 +114,45 @@ function promotePrincess(world: World, colony: ColonyRuntime): boolean {
   return true;
 }
 
+function assignNurseRoles(colony: ColonyRuntime): void {
+  const queenEggs = colony.underground.brood.filter((brood) => brood.stage === "egg" && brood.location === "queen" && !brood.isPrincess).length;
+  const nurseryLarvae = colony.underground.brood.filter((brood) => brood.stage === "larva" && brood.location === "nursery").length;
+  const transportNurses = Math.min(2, Math.ceil(queenEggs / 4));
+  const feedNurses = nurseryLarvae > 0 ? 1 : 0;
+  const target = Math.min(CONFIG.maxNurses, Math.max(CONFIG.startingNurses, transportNurses + feedNurses));
+  const nurses = colony.ants.filter((ant) => ant.state !== "dead" && ant.job === "nurse");
+
+  for (const ant of nurses.slice(target)) {
+    if (ant.state === "idle" && ant.carrying <= 0) {
+      ant.job = "idle";
+    }
+  }
+
+  const activeNurses = colony.ants.filter((ant) => ant.state !== "dead" && ant.job === "nurse").length;
+  if (activeNurses >= target) {
+    return;
+  }
+
+  const candidates = colony.ants
+    .filter((ant) =>
+      ant.state !== "dead" &&
+      ant.layer === "underground" &&
+      ant.state === "idle" &&
+      ant.carrying <= 0 &&
+      !ant.carryingDirt &&
+      !ant.carryingDebris &&
+      ant.job !== "dig" &&
+      ant.forageRole !== "scout"
+    )
+    .sort((a, b) => Number(a.id.replace("ant-", "")) - Number(b.id.replace("ant-", "")));
+
+  for (const ant of candidates.slice(0, target - activeNurses)) {
+    ant.job = "nurse";
+    ant.forageRole = undefined;
+    ant.foundFoodSourceId = undefined;
+  }
+}
+
 function restartColonyRuntime(world: World, colony: ColonyRuntime): void {
   const fresh = createColonyRuntime(
     colony.id,
@@ -158,7 +198,12 @@ export function step(world: World): void {
         planNurseryIfNeeded(colony.underground);
       }
       refreshDigTasks(colony.underground);
+      if (world.tick % 10 === 0) {
+        updateColonyFoodMemory(scopedWorld);
+      }
       colony.directives = computeDirectives(scopedWorld, colony.genomeState.current);
+      assignNurseRoles(colony);
+      assignForageRoles(scopedWorld);
       updateTickCache(scopedWorld);
       profiler.measure("stepAnt", () => {
         for (const ant of colony.ants) {
