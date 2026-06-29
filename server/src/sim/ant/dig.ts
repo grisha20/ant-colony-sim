@@ -1,6 +1,6 @@
 import type { Ant, Vec2 } from "../../../../shared/types";
 import { CONFIG } from "../../config";
-import { completeDigTile, findDigTarget } from "../underground";
+import { bumpUndergroundGridVersion, completeDigTile, findDigTarget } from "../underground";
 import type { World } from "../world";
 import { isWithinRadius, normalize } from "./utils";
 import { moveUndergroundToNode, moveUndergroundToward } from "./movement";
@@ -82,6 +82,7 @@ export function moveDigging(world: World, ant: Ant): boolean {
 
   ant.heading = normalize({ x: target.tile.x + 0.5 - ant.pos.x, y: target.tile.y + 0.5 - ant.pos.y });
   current.digProgress = (current.digProgress ?? 0) + CONFIG.digProgressPerTick;
+  bumpUndergroundGridVersion(world.underground);
   ant.digProgress = current.digProgress;
   if (current) {
     current.digProgress = ant.digProgress;

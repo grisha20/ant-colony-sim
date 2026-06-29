@@ -30,6 +30,7 @@ export type SpritePool = {
 export type SurfaceScene = {
   root: Container;
   staticLayer: Container;
+  entranceLayer: Container;
   pheromones: Graphics;
   webs: Graphics;
   debrisGraphics: Graphics;
@@ -40,6 +41,7 @@ export type SurfaceScene = {
   enemyPool: SpritePool;
   antPool: SpritePool;
   staticKey: string;
+  entranceKey: string;
   groundSprite?: Sprite;
 };
 

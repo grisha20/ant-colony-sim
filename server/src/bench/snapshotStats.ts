@@ -37,6 +37,8 @@ const antsByLayer = snapshot.ants.reduce<Record<string, number>>((counts, ant) =
 
 const stats = {
   file: CONFIG.snapshotFile,
+  snapshotVersion: snapshot.snapshotVersion ?? 1,
+  protocolVersion: snapshot.protocolVersion ?? 1,
   tick: snapshot.tick,
   bytes: {
     full: fullBytes,
@@ -64,6 +66,9 @@ const stats = {
     brood: colony.underground.brood.length,
     rooms: colony.underground.rooms.length,
     digTasks: colony.underground.digTasks.length,
+    gridVersion: colony.underground.gridVersion ?? 1,
+    roomsVersion: colony.underground.roomsVersion ?? 1,
+    digTasksVersion: colony.underground.digTasksVersion ?? 1,
     foodStorage: Math.round(colony.underground.foodStorage),
     dirtMound: colony.underground.dirtMound
   })),

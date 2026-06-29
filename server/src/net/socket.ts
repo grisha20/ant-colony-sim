@@ -1,5 +1,5 @@
 import { WebSocket, WebSocketServer } from "ws";
-import type { WorldSnapshot } from "../../../shared/types";
+import type { NetworkViewState, NetworkWorldSnapshot } from "../../../shared/types";
 import { CONFIG } from "../config";
 
 export type ClientCommand =
@@ -11,10 +11,15 @@ export type ClientCommand =
   | {
       type: "setSpeed";
       value: number;
+    }
+  | {
+      type: "setView";
+      mode: NetworkViewState["mode"];
+      undergroundColonyIndex: number;
     };
 
 export type SocketHub = {
-  broadcast(snapshot: WorldSnapshot): void;
+  broadcast(snapshotForView: (view: NetworkViewState) => NetworkWorldSnapshot): void;
   close(): void;
 };
 
@@ -32,6 +37,21 @@ function parseCommand(raw: string): ClientCommand | null {
       return {
         type: "setSpeed",
         value: command.value
+      };
+    }
+
+    if (command.type === "setView") {
+      const mode = command.mode === "underground" ? "underground" : command.mode === "surface" ? "surface" : null;
+      const undergroundColonyIndex = typeof command.undergroundColonyIndex === "number" && Number.isFinite(command.undergroundColonyIndex)
+        ? Math.max(0, Math.min(1, Math.floor(command.undergroundColonyIndex)))
+        : 0;
+      if (!mode) {
+        return null;
+      }
+      return {
+        type: "setView",
+        mode,
+        undergroundColonyIndex
       };
     }
 
@@ -62,15 +82,16 @@ function parseCommand(raw: string): ClientCommand | null {
 
 export function createSocketHub(
   port: number,
-  getInitialSnapshot: () => WorldSnapshot,
+  getSnapshot: (view: NetworkViewState, includePheromones: boolean) => NetworkWorldSnapshot,
   onCommand: (command: ClientCommand) => void = () => {}
 ): SocketHub {
   const server = new WebSocketServer({ port });
-  const clients = new Set<WebSocket>();
+  const clients = new Map<WebSocket, NetworkViewState>();
 
   server.on("connection", (socket) => {
-    clients.add(socket);
-    socket.send(JSON.stringify(getInitialSnapshot()));
+    const initialView: NetworkViewState = { mode: "surface", undergroundColonyIndex: 0 };
+    clients.set(socket, initialView);
+    socket.send(JSON.stringify(getSnapshot(initialView, true)));
 
     socket.on("close", () => {
       clients.delete(socket);
@@ -79,6 +100,14 @@ export function createSocketHub(
     socket.on("message", (data) => {
       const command = parseCommand(String(data));
       if (command) {
+        if (command.type === "setView") {
+          clients.set(socket, {
+            mode: command.mode,
+            undergroundColonyIndex: command.undergroundColonyIndex
+          });
+          socket.send(JSON.stringify(getSnapshot(clients.get(socket)!, false)));
+          return;
+        }
         onCommand(command);
       }
     });
@@ -87,12 +116,18 @@ export function createSocketHub(
   console.log(`WebSocket server listening on ws://localhost:${port}`);
 
   return {
-    broadcast(snapshot) {
-      const message = JSON.stringify(snapshot);
-      for (const client of clients) {
+    broadcast(snapshotForView) {
+      const messages = new Map<string, string>();
+      for (const [client, view] of clients) {
         if (client.readyState === WebSocket.OPEN) {
           if (client.bufferedAmount > MAX_BUFFERED_BYTES) {
             continue;
+          }
+          const key = `${view.mode}:${view.undergroundColonyIndex}`;
+          let message = messages.get(key);
+          if (!message) {
+            message = JSON.stringify(snapshotForView(view));
+            messages.set(key, message);
           }
           client.send(message);
         }

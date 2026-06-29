@@ -71,8 +71,9 @@ export function renderUnderground(scene: UndergroundScene, world: WorldSnapshot,
     world.underground.barracksA.y,
     world.underground.barracksB.x,
     world.underground.barracksB.y,
-    world.underground.digTasks.map((task) => `${task.id}:${task.status}:${task.completedTiles}/${task.targetTiles.length}`).join(","),
-    world.underground.grid.map((row) => row.map((tile) => `${tile.type[0]}${tile.digProgress ? Math.floor(tile.digProgress) : ""}`).join("")).join("")
+    world.underground.gridVersion ?? 1,
+    world.underground.roomsVersion ?? 1,
+    world.underground.digTasksVersion ?? 1
   ].join(":");
   if (scene.staticKey !== staticKey) {
     rebuildUndergroundStatic(scene, world, staticKey);

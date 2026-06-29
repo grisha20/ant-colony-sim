@@ -1,4 +1,21 @@
-import type { Ant, Brood, Colony, Debris, Enemy, FoodSource, PheromoneSnapshot, Surface, Underground, Vec2, WorldSnapshot } from "../../../shared/types";
+import {
+  CURRENT_PROTOCOL_VERSION,
+  CURRENT_SNAPSHOT_VERSION,
+  type Ant,
+  type Brood,
+  type Colony,
+  type Debris,
+  type Enemy,
+  type FoodSource,
+  type DurableWorldSnapshot,
+  type NetworkWorldSnapshot,
+  type NetworkViewState,
+  type PheromoneSnapshot,
+  type Surface,
+  type Underground,
+  type Vec2,
+  type WorldSnapshot
+} from "../../../shared/types";
 import { computeDirectives, createFitnessState, type ColonyDirectives, type FitnessState } from "../ai/controller";
 import type { GenomeState } from "../ai/genome";
 import type { SpiderGenomeState } from "../ai/spiderGenome";
@@ -21,7 +38,7 @@ export type ColonyRuntime = {
   homePheromone: PheromoneGrid;
 };
 
-export type World = Omit<WorldSnapshot, "pheromones" | "colonies"> & {
+export type World = Omit<WorldSnapshot, "snapshotVersion" | "protocolVersion" | "pheromones" | "colonies"> & {
   colonies: ColonyRuntime[];
   genomeState: GenomeState;
   spiderGenomeState: SpiderGenomeState;
@@ -272,6 +289,8 @@ function compactStorageRooms(underground: Underground): void {
   underground.digTasks = underground.digTasks.filter(
     (task) => task.roomType !== "storage" || task.status !== "done"
   );
+  underground.roomsVersion = (underground.roomsVersion ?? 1) + 1;
+  underground.digTasksVersion = (underground.digTasksVersion ?? 1) + 1;
   console.warn(`Compacted storage rooms from ${storageRooms.length} to ${keptStorage.length} while loading snapshot`);
 }
 
@@ -617,6 +636,13 @@ export function worldFromSnapshot(
   spiderGenomeState: SpiderGenomeState,
   genomeStateB: GenomeState = genomeState
 ): World {
+  const snapshotVersion = snapshot.snapshotVersion ?? 1;
+  if (snapshotVersion > CURRENT_SNAPSHOT_VERSION) {
+    console.warn(
+      `Snapshot version ${snapshotVersion} is newer than supported ${CURRENT_SNAPSHOT_VERSION}; trying best-effort load.`
+    );
+  }
+
   if (!snapshot.colonies?.length) {
     return createWorld(genomeState, spiderGenomeState, genomeStateB);
   }
@@ -799,6 +825,8 @@ export function toSnapshot(world: World, includePheromones = true): WorldSnapsho
       };
 
   return {
+    snapshotVersion: CURRENT_SNAPSHOT_VERSION,
+    protocolVersion: CURRENT_PROTOCOL_VERSION,
     tick: world.tick,
     surface: world.surface,
     underground: world.underground,
@@ -813,5 +841,57 @@ export function toSnapshot(world: World, includePheromones = true): WorldSnapsho
     ants: world.ants,
     enemies: world.enemies,
     pheromones
+  };
+}
+
+export function toDurableSnapshot(world: World): DurableWorldSnapshot {
+  return toSnapshot(world, false);
+}
+
+function lightweightUnderground(underground: Underground): Underground {
+  return {
+    ...underground,
+    grid: [],
+    rooms: [],
+    digTasks: [],
+    brood: [],
+    carrion: [],
+    princesses: [],
+    ants: []
+  };
+}
+
+function normalizeNetworkView(view?: Partial<NetworkViewState>): NetworkViewState {
+  return {
+    mode: view?.mode === "underground" ? "underground" : "surface",
+    undergroundColonyIndex: Math.max(0, Math.min(1, Math.floor(view?.undergroundColonyIndex ?? 0)))
+  };
+}
+
+export function toNetworkSnapshot(world: World, includePheromones = true, view?: Partial<NetworkViewState>): NetworkWorldSnapshot {
+  const networkView = normalizeNetworkView(view);
+  const isUndergroundView = networkView.mode === "underground";
+  const selectedColony = world.colonies[networkView.undergroundColonyIndex] ?? world.colonies[0];
+  const ants = isUndergroundView
+    ? selectedColony.ants.filter((ant) => ant.layer === "underground")
+    : world.ants.filter((ant) => ant.layer === "surface");
+  const snapshot = toSnapshot(world, includePheromones && !isUndergroundView);
+
+  return {
+    ...snapshot,
+    networkView,
+    underground: isUndergroundView ? selectedColony.underground : lightweightUnderground(world.underground),
+    colony: isUndergroundView ? selectedColony.colony : world.colony,
+    colonies: world.colonies.map((colony, index) => {
+      const includeFullUnderground = isUndergroundView && index === networkView.undergroundColonyIndex;
+      return {
+        id: colony.id,
+        color: colony.color,
+        underground: includeFullUnderground ? colony.underground : lightweightUnderground(colony.underground),
+        colony: colony.colony,
+        ants: []
+      };
+    }),
+    ants
   };
 }

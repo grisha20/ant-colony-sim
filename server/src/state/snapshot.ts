@@ -3,7 +3,7 @@ import path from "node:path";
 import { CONFIG } from "../config";
 import type { GenomeState } from "../ai/genome";
 import type { SpiderGenomeState } from "../ai/spiderGenome";
-import { toSnapshot, worldFromSnapshot, type World } from "../sim/world";
+import { toDurableSnapshot, worldFromSnapshot, type World } from "../sim/world";
 import type { WorldSnapshot } from "../../../shared/types";
 
 export async function loadWorldSnapshot(
@@ -35,7 +35,7 @@ export async function saveWorldSnapshot(world: World): Promise<void> {
   isSaving = true;
   try {
     await mkdir(path.dirname(CONFIG.snapshotFile), { recursive: true });
-    await writeFile(CONFIG.snapshotFile, JSON.stringify(toSnapshot(world, false)), "utf8");
+    await writeFile(CONFIG.snapshotFile, JSON.stringify(toDurableSnapshot(world)), "utf8");
   } finally {
     isSaving = false;
   }

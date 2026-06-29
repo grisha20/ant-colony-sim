@@ -1,7 +1,7 @@
 import { CONFIG } from "./config";
 import { saveWorldSnapshot } from "./state/snapshot";
 import { step } from "./sim/step";
-import { toSnapshot, type World } from "./sim/world";
+import type { World } from "./sim/world";
 import { profiler } from "./utils/profiler";
 
 export type LoopController = {
@@ -9,7 +9,7 @@ export type LoopController = {
   getSpeed(): number;
 };
 
-export function startLoop(world: World, onSnapshot: (snapshot: ReturnType<typeof toSnapshot>) => void): LoopController {
+export function startLoop(world: World, onSnapshot: (includePheromones: boolean) => void): LoopController {
   let simSpeed = 1;
   let lastPheromoneSentAt = 0;
   let lastSaveAt = Date.now();
@@ -44,9 +44,8 @@ export function startLoop(world: World, onSnapshot: (snapshot: ReturnType<typeof
       lastSaveAt = now;
     }
 
-    // Замеряем время создания снапшота и рассылки по WebSocket
-    const snapshot = profiler.measure("toSnapshot", () => toSnapshot(world, includePheromones));
-    profiler.measure("broadcast", () => onSnapshot(snapshot));
+    // Snapshot собирается внутри hub под view state каждого клиента.
+    profiler.measure("broadcast", () => onSnapshot(includePheromones));
 
     // Вывод логов профайлера в консоль раз в 10 секунд
     profiler.reportIfNeeded();

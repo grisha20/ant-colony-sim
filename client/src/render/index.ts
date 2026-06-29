@@ -28,12 +28,11 @@ function undergroundWorld(world: WorldSnapshot, colonyIndex: number): WorldSnaps
     return world;
   }
 
-  const colonyAntIds = new Set(colony.ants.map((ant) => ant.id));
   return {
     ...world,
     underground: colony.underground,
     colony: colony.colony,
-    ants: world.ants.filter((ant) => colonyAntIds.has(ant.id))
+    ants: world.ants.filter((ant) => ant.colonyId === colony.id)
   };
 }
 

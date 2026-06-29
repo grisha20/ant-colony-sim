@@ -3,7 +3,7 @@ import { loadGenome } from "./ai/genome";
 import { loadSpiderGenome } from "./ai/spiderGenome";
 import { createSocketHub } from "./net/socket";
 import { loadWorldSnapshot, saveWorldSnapshot } from "./state/snapshot";
-import { addFoodSource, createWorld, toSnapshot } from "./sim/world";
+import { addFoodSource, createWorld, toNetworkSnapshot } from "./sim/world";
 import { startLoop, type LoopController } from "./loop";
 
 const genomeState = await loadGenome();
@@ -13,7 +13,7 @@ const loadedWorld = await loadWorldSnapshot(genomeState, spiderGenomeState, geno
 const world = loadedWorld ?? createWorld(genomeState, spiderGenomeState, genomeStateB);
 
 let loop: LoopController;
-const hub = createSocketHub(CONFIG.wsPort, () => toSnapshot(world), (command) => {
+const hub = createSocketHub(CONFIG.wsPort, (view, includePheromones) => toNetworkSnapshot(world, includePheromones, view), (command) => {
   if (command.type === "dropFood") {
     addFoodSource(world, command.x, command.y, CONFIG.playerFoodAmount);
   }
@@ -21,7 +21,9 @@ const hub = createSocketHub(CONFIG.wsPort, () => toSnapshot(world), (command) =>
     loop.setSpeed(Math.max(1, Math.min(50, Math.floor(command.value))));
   }
 });
-loop = startLoop(world, (snapshot) => hub.broadcast(snapshot));
+loop = startLoop(world, (includePheromones) => {
+  hub.broadcast((view) => toNetworkSnapshot(world, includePheromones, view));
+});
 
 process.on("SIGINT", () => {
   saveWorldSnapshot(world)

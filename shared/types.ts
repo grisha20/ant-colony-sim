@@ -1,5 +1,9 @@
 export type Layer = "surface" | "underground";
 export type DetailLevel = "full" | "aggregate";
+export type NetworkViewMode = "surface" | "underground";
+
+export const CURRENT_SNAPSHOT_VERSION = 1;
+export const CURRENT_PROTOCOL_VERSION = 1;
 
 export type Vec2 = {
   x: number;
@@ -112,6 +116,9 @@ export type Princess = {
 export type Underground = {
   width: number;
   height: number;
+  gridVersion: number;
+  roomsVersion: number;
+  digTasksVersion: number;
   grid: UndergroundTile[][];
   rooms: UndergroundRoom[];
   digTasks: DigTask[];
@@ -197,6 +204,8 @@ export type PheromoneSnapshot = {
 };
 
 export type WorldSnapshot = {
+  snapshotVersion: number;
+  protocolVersion: number;
   tick: number;
   surface: Surface;
   underground: Underground;
@@ -211,4 +220,14 @@ export type WorldSnapshot = {
   ants: Ant[];
   enemies: Enemy[];
   pheromones: PheromoneSnapshot;
+};
+
+export type DurableWorldSnapshot = WorldSnapshot;
+export type NetworkViewState = {
+  mode: NetworkViewMode;
+  undergroundColonyIndex: number;
+};
+
+export type NetworkWorldSnapshot = WorldSnapshot & {
+  networkView: NetworkViewState;
 };

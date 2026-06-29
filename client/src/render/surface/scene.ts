@@ -38,6 +38,7 @@ export function visibleSurfaceBounds(camera: Camera, viewportWidth: number, view
 export function createSurfaceScene(): SurfaceScene {
   const root = new Container();
   const staticLayer = new Container();
+  const entranceLayer = new Container();
   const pheromones = new Graphics();
   const webs = new Graphics();
   const debrisGraphics = new Graphics();
@@ -48,11 +49,12 @@ export function createSurfaceScene(): SurfaceScene {
   const carriedCarrionContainer = new Container();
   const antContainer = new Container();
 
-  root.addChild(staticLayer, pheromones, webs, debrisGraphics, foodContainer, carrionContainer, lairContainer, enemyContainer, carriedCarrionContainer, antContainer);
+  root.addChild(staticLayer, entranceLayer, pheromones, webs, debrisGraphics, foodContainer, carrionContainer, lairContainer, enemyContainer, carriedCarrionContainer, antContainer);
 
   return {
     root,
     staticLayer,
+    entranceLayer,
     pheromones,
     webs,
     debrisGraphics,
@@ -62,7 +64,8 @@ export function createSurfaceScene(): SurfaceScene {
     carriedCarrionPool: createSpritePool(carriedCarrionContainer, () => createCarrionSprite(1.7)),
     enemyPool: createSpritePool(enemyContainer, () => createSpiderSprite(4)),
     antPool: createSpritePool(antContainer, () => createAntSprite(false, 2.45)),
-    staticKey: ""
+    staticKey: "",
+    entranceKey: ""
   };
 }
 
@@ -87,7 +90,6 @@ function rebuildSurfaceStatic(
     bottom: world.surface.height
   };
   drawSurfaceGround(tempContainer, world.surface.width, world.surface.height, cell, fullBounds);
-  drawSurfaceEntrance(tempContainer, world, cell);
 
   const widthPx = world.surface.width * cell;
   const heightPx = world.surface.height * cell;
@@ -109,6 +111,20 @@ function rebuildSurfaceStatic(
   scene.staticKey = staticKey;
 }
 
+function updateSurfaceEntrances(scene: SurfaceScene, world: WorldSnapshot, cell: number, entranceKey: string): void {
+  if (scene.entranceKey === entranceKey) {
+    return;
+  }
+
+  const children = scene.entranceLayer.removeChildren();
+  for (const child of children) {
+    child.destroy({ children: true });
+  }
+
+  drawSurfaceEntrance(scene.entranceLayer, world, cell);
+  scene.entranceKey = entranceKey;
+}
+
 export function renderSurface(
   scene: SurfaceScene,
   renderer: Renderer,
@@ -123,16 +139,20 @@ export function renderSurface(
 
   const cell = SURFACE_TILE_SIZE;
   const bounds = visibleSurfaceBounds(camera, viewportWidth, viewportHeight);
-  const dirtMounds = world.colonies?.map((c) => Math.floor((c.underground?.dirtMound ?? 0) / 30)) ?? [Math.floor((world.underground.dirtMound ?? 0) / 30)];
   const staticKey = [
     world.surface.width,
-    world.surface.height,
-    ...(world.surface.entrances ?? [world.surface.entrance]).flatMap((entrance) => [entrance.x, entrance.y]),
-    ...dirtMounds
+    world.surface.height
   ].join(":");
   if (scene.staticKey !== staticKey) {
     rebuildSurfaceStatic(scene, renderer, world, cell, staticKey);
   }
+
+  const dirtMounds = world.colonies?.map((c) => Math.floor((c.underground?.dirtMound ?? 0) / 30)) ?? [Math.floor((world.underground.dirtMound ?? 0) / 30)];
+  const entranceKey = [
+    ...(world.surface.entrances ?? [world.surface.entrance]).flatMap((entrance) => [entrance.x, entrance.y]),
+    ...dirtMounds
+  ].join(":");
+  updateSurfaceEntrances(scene, world, cell, entranceKey);
 
   drawSurfacePheromones(scene.pheromones, world, cell, bounds);
   updateSurfaceWebs(scene.webs, world, cell, bounds);

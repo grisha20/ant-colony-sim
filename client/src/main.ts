@@ -1,5 +1,5 @@
 import { Application } from "pixi.js";
-import type { WorldSnapshot } from "../../shared/types";
+import { CURRENT_PROTOCOL_VERSION, type NetworkWorldSnapshot, type WorldSnapshot } from "../../shared/types";
 import { renderWorld, surfaceTileFromGlobal, type Camera, type ViewMode } from "./render";
 
 const appRoot = document.querySelector<HTMLDivElement>("#app");
@@ -405,10 +405,11 @@ let currentUndergroundColony = 0;
 let cameraMode: CameraMode = "follow";
 let currentSpeed = 1;
 let camera: Camera = { x: 50, y: 50, zoom: 1 };
-let latestWorld: WorldSnapshot | null = null;
+let latestWorld: NetworkWorldSnapshot | null = null;
 let lastRenderAt = 0;
 let lastPacketTime = 0;
 let lastPheromones: WorldSnapshot["pheromones"] | null = null;
+let warnedProtocolVersion = false;
 let isDragging = false;
 let pointerDown = false;
 let dragDistance = 0;
@@ -522,6 +523,9 @@ function draw(interpT: number): void {
   if (!latestWorld) {
     return;
   }
+  if (!snapshotMatchesView(latestWorld)) {
+    return;
+  }
 
   if (currentView === "surface" && cameraMode === "follow") {
     centerOnNest(latestWorld);
@@ -561,12 +565,14 @@ for (const button of viewButtons) {
     for (const item of viewButtons) {
       item.classList.toggle("active", item === button);
     }
+    requestNetworkView();
   });
 }
 
 for (const button of nestButtons) {
   button.addEventListener("click", () => {
     setUndergroundColony(Number(button.dataset.nest ?? 0));
+    requestNetworkView();
   });
 }
 
@@ -606,6 +612,25 @@ pixi.ticker.add(() => {
 
 const wsHost = window.location.hostname || "localhost";
 const socket = new WebSocket(`ws://${wsHost}:8787`);
+
+function requestNetworkView(): void {
+  if (socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+
+  socket.send(JSON.stringify({
+    type: "setView",
+    mode: currentView,
+    undergroundColonyIndex: currentUndergroundColony
+  }));
+}
+
+function snapshotMatchesView(world: NetworkWorldSnapshot): boolean {
+  return (
+    world.networkView.mode === currentView &&
+    world.networkView.undergroundColonyIndex === currentUndergroundColony
+  );
+}
 
 function setSpeed(speed: number): void {
   currentSpeed = speed;
@@ -702,6 +727,7 @@ pixi.canvas.addEventListener("wheel", (event) => {
 socket.addEventListener("open", () => {
   statusNode.textContent = "Подключено";
   setSpeed(currentSpeed);
+  requestNetworkView();
 });
 
 socket.addEventListener("close", () => {
@@ -737,7 +763,12 @@ socket.addEventListener("message", (event) => {
 
   const rawMessage = String(event.data);
   lastPayloadKb = Math.round(new Blob([rawMessage]).size / 1024);
-  const snap = JSON.parse(rawMessage) as WorldSnapshot;
+  const snap = JSON.parse(rawMessage) as NetworkWorldSnapshot;
+  const protocolVersion = snap.protocolVersion ?? 1;
+  if (!warnedProtocolVersion && protocolVersion !== CURRENT_PROTOCOL_VERSION) {
+    console.warn(`Unsupported protocolVersion ${protocolVersion}; client expects ${CURRENT_PROTOCOL_VERSION}.`);
+    warnedProtocolVersion = true;
+  }
 
   const hasNewPheromones = snap.pheromones && snap.pheromones.food && snap.pheromones.food.i && snap.pheromones.food.i.length > 0;
   if (hasNewPheromones) {
