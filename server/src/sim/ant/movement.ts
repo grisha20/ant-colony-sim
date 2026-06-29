@@ -5,7 +5,7 @@ import type { UndergroundNode } from "../nav";
 import { isDugTile, tileCenter } from "../underground";
 import type { World } from "../world";
 import { randomHeading } from "../world";
-import { distance, fanDirection, isWithinRadius, moveToward, normalize, posTile } from "./utils";
+import { distance, distanceSq, fanDirection, isWithinRadius, moveToward, normalize, posTile } from "./utils";
 
 export type CachedPath = {
   targetTile: Vec2;
@@ -14,6 +14,7 @@ export type CachedPath = {
 };
 
 export const antPaths = new Map<string, CachedPath>();
+const surfaceQueryScratch: Ant[] = [];
 
 export function clearDeadAntPaths(activeIds: Set<string>): void {
   for (const antId of antPaths.keys()) {
@@ -33,6 +34,9 @@ export function surfaceMoveSpeed(world: World, ant: Ant): number {
     if (other.id !== ant.id) {
       if (isWithinRadius(other.pos, ant.pos, defRad)) {
         nearbyWorkers += 1;
+        if (nearbyWorkers >= CONFIG.antMobCountThreshold) {
+          break;
+        }
       }
     }
   }
@@ -364,17 +368,19 @@ export function applySeparation(world: World, ant: Ant, desired: Vec2): Vec2 {
 
   const separationRadius = 1.8;
 
-  // tickCache.surfaceAnts already filtered: layer === "surface" && state !== "dead"
-  const list = tickCache.surfaceAnts;
+  // tickCache.surfaceAntGrid contains the same filtered surface ants as tickCache.surfaceAnts.
+  const list = tickCache.surfaceAntGrid.queryInto(ant.pos, separationRadius, surfaceQueryScratch);
   const len = list.length;
+  const separationRadiusSq = separationRadius * separationRadius;
   for (let i = 0; i < len; i += 1) {
     const other = list[i];
     if (other.id === ant.id) {
       continue;
     }
 
-    const dist = distance(ant.pos, other.pos);
-    if (dist < separationRadius && dist > 0.01) {
+    const distSq = distanceSq(ant.pos, other.pos);
+    if (distSq < separationRadiusSq && distSq > 0.0001) {
+      const dist = Math.sqrt(distSq);
       const force = (separationRadius - dist) / separationRadius;
       separationX += ((ant.pos.x - other.pos.x) / dist) * force;
       separationY += ((ant.pos.y - other.pos.y) / dist) * force;

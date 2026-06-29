@@ -1,9 +1,12 @@
-import type { Enemy, Vec2 } from "../../../shared/types";
+import type { Ant, Enemy, Vec2 } from "../../../shared/types";
 import { applyMode, chooseMode, hasAvailableCarrion, isSpiderFastMode, type SpiderMode } from "../ai/spiderBrain";
 import { recordAndEvolveSpider, saveSpiderGenome } from "../ai/spiderGenome";
 import { CONFIG } from "../config";
+import { tickCache } from "./cache";
 import { isWithinRadius } from "./ant/utils";
 import { addFoodSource, type World } from "./world";
+
+const enemyQueryScratch: Ant[] = [];
 
 let nextEnemyId = 1;
 let spiderRespawnTick: number | null = null;
@@ -107,10 +110,8 @@ function loneChaseTarget(world: World, enemy: Enemy): Vec2 | null {
   let loneAnt: Vec2 | null = null;
   let nearbyCount = 0;
   const chaseRange = CONFIG.spiderChaseRange;
-  for (const ant of world.ants) {
-    if (ant.layer !== "surface" || ant.state === "dead") {
-      continue;
-    }
+  const nearby = tickCache.worldSurfaceAntGrid.queryInto(enemy.pos, chaseRange, enemyQueryScratch);
+  for (const ant of nearby) {
     if (isWithinRadius(ant.pos, enemy.pos, chaseRange)) {
       nearbyCount += 1;
       if (nearbyCount > 1) {
@@ -172,13 +173,7 @@ function moveSpider(world: World, enemy: Enemy, liveAntsCount: number): void {
 }
 
 function liveAntCount(world: World): number {
-  let count = 0;
-  for (const ant of world.ants) {
-    if (ant.state !== "dead") {
-      count += 1;
-    }
-  }
-  return count;
+  return tickCache.worldLiveAntsCount;
 }
 
 function updateSpiderStamina(enemy: Enemy, fastMode: boolean): void {
@@ -213,10 +208,8 @@ function applySpiderMode(
 function nearestSurfaceAnt(world: World, enemy: Enemy): { distance: number } | null {
   let nearestDist = Number.POSITIVE_INFINITY;
   let found = false;
-  for (const ant of world.ants) {
-    if (ant.layer !== "surface" || ant.state === "dead") {
-      continue;
-    }
+  const ants = tickCache.worldSurfaceAnts;
+  for (const ant of ants) {
     const antDistance = distance(ant.pos, enemy.pos);
     if (antDistance < nearestDist) {
       nearestDist = antDistance;
@@ -228,8 +221,9 @@ function nearestSurfaceAnt(world: World, enemy: Enemy): { distance: number } | n
 
 function nearbyAntCount(world: World, enemy: Enemy, radius: number): number {
   let count = 0;
-  for (const ant of world.ants) {
-    if (ant.layer === "surface" && ant.state !== "dead" && isWithinRadius(ant.pos, enemy.pos, radius)) {
+  const nearby = tickCache.worldSurfaceAntGrid.queryInto(enemy.pos, radius, enemyQueryScratch);
+  for (const ant of nearby) {
+    if (isWithinRadius(ant.pos, enemy.pos, radius)) {
       count += 1;
     }
   }
@@ -305,9 +299,9 @@ function evolveSpiderGeneration(world: World): void {
 function isSpiderUnderPressure(world: World, enemy: Enemy): boolean {
   let mobbingFighters = 0;
   const defRad = CONFIG.defenseRadius;
-  for (const ant of world.ants) {
+  const nearby = tickCache.worldSurfaceAntGrid.queryInto(enemy.pos, defRad, enemyQueryScratch);
+  for (const ant of nearby) {
     if (
-      ant.layer === "surface" &&
       ant.state === "fight" &&
       isWithinRadius(ant.pos, enemy.pos, defRad)
     ) {
@@ -328,8 +322,9 @@ function updateSpiderStarvation(enemy: Enemy): boolean {
 function creditSpiderKill(world: World, enemy: Enemy): void {
   const creditedColonies = new Set<string>();
   const defRad = CONFIG.defenseRadius;
-  for (const ant of world.ants) {
-    if (ant.layer === "surface" && ant.state === "fight" && isWithinRadius(ant.pos, enemy.pos, defRad)) {
+  const nearby = tickCache.worldSurfaceAntGrid.queryInto(enemy.pos, defRad, enemyQueryScratch);
+  for (const ant of nearby) {
+    if (ant.state === "fight" && isWithinRadius(ant.pos, enemy.pos, defRad)) {
       creditedColonies.add(ant.colonyId);
     }
   }
@@ -375,11 +370,8 @@ export function updateEnemies(world: World): void {
 
     const isStartPeriod = liveAntsCount <= 10;
 
-    for (const ant of world.ants) {
-      if (ant.layer !== "surface" || ant.state === "dead") {
-        continue;
-      }
-
+    const attackCandidates = tickCache.worldSurfaceAntGrid.queryInto(enemy.pos, attackRadius, enemyQueryScratch);
+    for (const ant of attackCandidates) {
       if (!isStartPeriod && isWithinRadius(ant.pos, enemy.pos, attackRadius)) {
         const hadEnergy = ant.energy > 0;
         ant.energy -= damage;

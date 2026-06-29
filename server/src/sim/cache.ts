@@ -1,5 +1,6 @@
 import type { Ant } from "../../../shared/types";
 import { CONFIG } from "../config";
+import { SpatialGrid } from "./spatial";
 import type { World } from "./world";
 
 function numericAntId(id: string): number {
@@ -16,6 +17,10 @@ export const tickCache = {
   undergroundNurses: 0,
   undergroundExitingAnts: [] as Ant[],
   surfaceAnts: [] as Ant[],
+  surfaceAntGrid: new SpatialGrid<Ant>(2.0),
+  worldSurfaceAnts: [] as Ant[],
+  worldSurfaceAntGrid: new SpatialGrid<Ant>(2.0),
+  worldLiveAntsCount: 0,
   queenGuardIds: new Set<string>(),
   liveAntsCount: 0
 };
@@ -93,6 +98,29 @@ export function updateTickCache(world: World): void {
   tickCache.undergroundNurses = undergroundNurses;
   tickCache.undergroundExitingAnts = undergroundExitingAnts;
   tickCache.surfaceAnts = surfaceAnts;
+  tickCache.surfaceAntGrid.rebuild(surfaceAnts);
   tickCache.queenGuardIds = guardIds;
   tickCache.liveAntsCount = liveAntsCount;
+}
+
+export function updateWorldSurfaceCache(world: World): void {
+  let liveAntsCount = 0;
+  const surfaceAnts: Ant[] = [];
+  const ants = world.ants;
+  const len = ants.length;
+  for (let i = 0; i < len; i += 1) {
+    const ant = ants[i];
+    if (ant.state === "dead") {
+      continue;
+    }
+
+    liveAntsCount += 1;
+    if (ant.layer === "surface") {
+      surfaceAnts.push(ant);
+    }
+  }
+
+  tickCache.worldSurfaceAnts = surfaceAnts;
+  tickCache.worldSurfaceAntGrid.rebuild(surfaceAnts);
+  tickCache.worldLiveAntsCount = liveAntsCount;
 }

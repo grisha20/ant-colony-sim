@@ -2,7 +2,7 @@ import { computeDirectives, createFitnessState, updateFitness } from "../ai/cont
 import { recordAndEvolve, saveGenome } from "../ai/genome";
 import { CONFIG } from "../config";
 import { stepAnt, clearDeadAntPaths } from "./ant";
-import { updateTickCache } from "./cache";
+import { updateTickCache, updateWorldSurfaceCache } from "./cache";
 import { profiler } from "../utils/profiler";
 import { updateBrood, updateQueen } from "./brood";
 import { updateEnemies } from "./enemy";
@@ -164,6 +164,7 @@ export function step(world: World): void {
   }
 
   syncWorldLegacyFields(world);
+  updateWorldSurfaceCache(world);
   updateEnemies(world);
 
   for (const colony of world.colonies) {

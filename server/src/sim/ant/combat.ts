@@ -15,6 +15,8 @@ import {
 } from "./movement";
 import { isColonyStarving, isColonyWarHungry } from "./colony-state";
 
+const combatQueryScratch: Ant[] = [];
+
 export function isThreateningSpider(world: World, spiderIndex: number): boolean {
   const enemy = world.enemies[spiderIndex];
   if (!enemy || enemy.type !== "spider" || enemy.hp <= 0) {
@@ -22,7 +24,7 @@ export function isThreateningSpider(world: World, spiderIndex: number): boolean 
   }
 
   const attackRadius = spiderAttackRadius(enemy);
-  const list = tickCache.surfaceAnts;
+  const list = tickCache.surfaceAntGrid.queryInto(enemy.pos, attackRadius, combatQueryScratch);
   const len = list.length;
   for (let i = 0; i < len; i += 1) {
     if (isWithinRadius(list[i].pos, enemy.pos, attackRadius)) {
@@ -39,9 +41,9 @@ export function defenderCountForSpider(world: World, spiderIndex: number): numbe
   }
 
   let count = 0;
-  const list = tickCache.surfaceAnts;
-  const len = list.length;
   const defRad = CONFIG.defenseRadius;
+  const list = tickCache.surfaceAntGrid.queryInto(enemy.pos, defRad, combatQueryScratch);
+  const len = list.length;
   for (let i = 0; i < len; i += 1) {
     const ant = list[i];
     if (ant.state === "fight" && ant.carrying <= 0 && isWithinRadius(ant.pos, enemy.pos, defRad)) {
@@ -58,9 +60,9 @@ export function freeWorkerCountNearSpider(world: World, spiderIndex: number): nu
   }
 
   let count = 0;
-  const list = tickCache.surfaceAnts;
-  const len = list.length;
   const defRad = CONFIG.defenseRadius;
+  const list = tickCache.surfaceAntGrid.queryInto(enemy.pos, defRad, combatQueryScratch);
+  const len = list.length;
   for (let i = 0; i < len; i += 1) {
     const ant = list[i];
     if (ant.carrying <= 0 && isWithinRadius(ant.pos, enemy.pos, defRad)) {

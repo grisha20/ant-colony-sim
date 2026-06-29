@@ -1,6 +1,7 @@
 import type { Ant, Enemy, FoodSource, Vec2 } from "../../../shared/types";
 import { CONFIG } from "../config";
 import { isWithinRadius } from "../sim/ant/utils";
+import { tickCache } from "../sim/cache";
 import type { World } from "../sim/world";
 import type { SpiderGenome } from "./spiderGenome";
 
@@ -8,6 +9,7 @@ export type SpiderMode = "ambush" | "stalk" | "chase" | "retreat" | "feed" | "st
 
 const wanderTargets = new Map<string, Vec2>();
 const retreatTargets = new Map<string, Vec2>();
+const spiderBrainQueryScratch: Ant[] = [];
 
 function distance(a: Vec2, b: Vec2): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
@@ -33,30 +35,12 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
-function isLiveSurfaceAnt(ant: Ant): boolean {
-  return ant.layer === "surface" && ant.state !== "dead";
-}
-
 function liveAntCount(world: World): number {
-  let count = 0;
-  for (const ant of world.ants) {
-    if (ant.state !== "dead") {
-      count += 1;
-    }
-  }
-
-  return count;
+  return tickCache.worldLiveAntsCount;
 }
 
 function surfaceAntCount(world: World): number {
-  let count = 0;
-  for (const ant of world.ants) {
-    if (isLiveSurfaceAnt(ant)) {
-      count += 1;
-    }
-  }
-
-  return count;
+  return tickCache.worldSurfaceAnts.length;
 }
 
 function nearestFood(world: World, spider: Enemy): FoodSource | null {
@@ -105,11 +89,8 @@ function hasStorageWork(world: World, spider: Enemy): boolean {
 
 function nearestAnt(world: World, spider: Enemy): { ant: Ant; distance: number } | null {
   let nearest: { ant: Ant; distance: number } | null = null;
-  for (const ant of world.ants) {
-    if (!isLiveSurfaceAnt(ant)) {
-      continue;
-    }
-
+  const ants = tickCache.worldSurfaceAnts;
+  for (const ant of ants) {
     const antDistance = distance(spider.pos, ant.pos);
     if (!nearest || antDistance < nearest.distance) {
       nearest = { ant, distance: antDistance };
@@ -121,8 +102,9 @@ function nearestAnt(world: World, spider: Enemy): { ant: Ant; distance: number }
 
 function nearbyAntCount(world: World, spider: Enemy, radius: number): number {
   let count = 0;
-  for (const ant of world.ants) {
-    if (isLiveSurfaceAnt(ant) && isWithinRadius(ant.pos, spider.pos, radius)) {
+  const nearby = tickCache.worldSurfaceAntGrid.queryInto(spider.pos, radius, spiderBrainQueryScratch);
+  for (const ant of nearby) {
+    if (isWithinRadius(ant.pos, spider.pos, radius)) {
       count += 1;
     }
   }
@@ -132,8 +114,9 @@ function nearbyAntCount(world: World, spider: Enemy, radius: number): number {
 
 function mobbingFighterCount(world: World, spider: Enemy): number {
   let count = 0;
-  for (const ant of world.ants) {
-    if (isLiveSurfaceAnt(ant) && ant.state === "fight" && isWithinRadius(ant.pos, spider.pos, CONFIG.defenseRadius)) {
+  const nearby = tickCache.worldSurfaceAntGrid.queryInto(spider.pos, CONFIG.defenseRadius, spiderBrainQueryScratch);
+  for (const ant of nearby) {
+    if (ant.state === "fight" && isWithinRadius(ant.pos, spider.pos, CONFIG.defenseRadius)) {
       count += 1;
     }
   }
@@ -145,11 +128,8 @@ function antCentroid(world: World, spider: Enemy): Vec2 | null {
   let totalX = 0;
   let totalY = 0;
   let totalWeight = 0;
-  for (const ant of world.ants) {
-    if (!isLiveSurfaceAnt(ant)) {
-      continue;
-    }
-
+  const ants = tickCache.worldSurfaceAnts;
+  for (const ant of ants) {
     const weight = 1 / Math.max(1, distance(spider.pos, ant.pos));
     totalX += ant.pos.x * weight;
     totalY += ant.pos.y * weight;
