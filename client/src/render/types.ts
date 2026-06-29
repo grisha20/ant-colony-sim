@@ -1,4 +1,4 @@
-import type { Container, Graphics, Sprite } from "pixi.js";
+import type { Container, Graphics, Sprite, RenderTexture } from "pixi.js";
 
 export type ViewMode = "surface" | "underground";
 export type Camera = {
@@ -43,6 +43,10 @@ export type SurfaceScene = {
   staticKey: string;
   entranceKey: string;
   groundSprite?: Sprite;
+  trampleTexture?: RenderTexture;
+  trampleSprite?: Sprite;
+  trailPainter?: Graphics;
+  eraserGraphics?: Graphics;
 };
 
 export type UndergroundScene = {

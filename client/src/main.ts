@@ -29,6 +29,9 @@ appRoot.innerHTML = `
         <button data-speed="20" type="button">20x</button>
         <button data-speed="50" type="button">Max</button>
       </div>
+      <div class="segmented trampleControls" aria-label="Тропинки">
+        <button class="active" id="btn-trample" type="button">Тропинки: Вкл</button>
+      </div>
       <div class="segmented cameraControls" aria-label="Камера">
         <button class="active" data-camera="follow" type="button">Слежение</button>
         <button data-camera="free" type="button">Свободно</button>
@@ -200,6 +203,14 @@ style.textContent = `
     display: grid;
   }
 
+  .trampleControls {
+    display: grid;
+  }
+
+  .app.undergroundView .trampleControls {
+    display: none;
+  }
+
   .hud {
     right: 14px;
     top: 82px;
@@ -315,6 +326,7 @@ const viewButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[da
 const nestButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-nest]"));
 const speedButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-speed]"));
 const cameraButtons = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-camera]"));
+const btnTrample = document.querySelector<HTMLButtonElement>("#btn-trample");
 const tick = document.querySelector<HTMLElement>("#tick");
 const spiderGeneration = document.querySelector<HTMLElement>("#spider-generation");
 const spiderGenerationsRun = document.querySelector<HTMLElement>("#spider-generations-run");
@@ -324,6 +336,8 @@ const packetMs = document.querySelector<HTMLElement>("#packet-ms");
 const payloadKb = document.querySelector<HTMLElement>("#payload-kb");
 const renderMs = document.querySelector<HTMLElement>("#render-ms");
 const antsCount = document.querySelector<HTMLElement>("#ants-count");
+
+let trampleEnabled = true;
 
 const colonyNodes = [0, 1].map((index) => {
   const key = index === 0 ? "a" : "b";
@@ -354,6 +368,7 @@ if (
   !payloadKb ||
   !renderMs ||
   !antsCount ||
+  !btnTrample ||
   colonyNodes.some((nodes) => Object.values(nodes).some((node) => !node))
 ) {
   throw new Error("Missing UI nodes");
@@ -553,10 +568,17 @@ function draw(interpT: number): void {
     pixi.screen.width,
     pixi.screen.height,
     camera,
-    currentUndergroundColony
+    currentUndergroundColony,
+    trampleEnabled
   );
   lastRenderCostMs = performance.now() - renderStart;
 }
+
+btnTrample.addEventListener("click", () => {
+  trampleEnabled = !trampleEnabled;
+  btnTrample.classList.toggle("active", trampleEnabled);
+  btnTrample.textContent = `Тропинки: ${trampleEnabled ? "Вкл" : "Выкл"}`;
+});
 
 for (const button of viewButtons) {
   button.addEventListener("click", () => {

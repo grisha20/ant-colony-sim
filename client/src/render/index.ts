@@ -44,7 +44,8 @@ export function renderWorld(
   viewportWidth = 900,
   viewportHeight = 760,
   camera: Camera = { x: world.surface.entrance.x, y: world.surface.entrance.y, zoom: 1 },
-  undergroundColonyIndex = 0
+  undergroundColonyIndex = 0,
+  trampleEnabled = true
 ): void {
   ensureStage(stage);
 
@@ -52,7 +53,7 @@ export function renderWorld(
   rendererState.underground.root.visible = mode === "underground";
 
   if (mode === "surface") {
-    renderSurface(rendererState.surface, renderer, world, viewportWidth, viewportHeight, camera);
+    renderSurface(rendererState.surface, renderer, world, viewportWidth, viewportHeight, camera, trampleEnabled);
     return;
   }
 

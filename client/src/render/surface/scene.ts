@@ -82,6 +82,19 @@ function rebuildSurfaceStatic(
     scene.groundSprite = undefined;
   }
 
+  if (scene.trampleSprite) {
+    scene.trampleSprite.destroy({ texture: true });
+    scene.trampleSprite = undefined;
+  }
+  if (scene.trampleTexture) {
+    scene.trampleTexture.destroy(true);
+    scene.trampleTexture = undefined;
+  }
+  if (scene.eraserGraphics) {
+    scene.eraserGraphics.destroy();
+    scene.eraserGraphics = undefined;
+  }
+
   const tempContainer = new Container();
   const fullBounds: ViewBounds = {
     left: 0,
@@ -107,6 +120,20 @@ function rebuildSurfaceStatic(
   scene.staticLayer.addChild(groundSprite);
   scene.groundSprite = groundSprite;
 
+  const trampleTexture = RenderTexture.create({
+    width: world.surface.width,
+    height: world.surface.height
+  });
+  const trampleSprite = new Sprite(trampleTexture);
+  trampleSprite.width = world.surface.width * cell;
+  trampleSprite.height = world.surface.height * cell;
+  trampleSprite.tint = 0x5a4325; // Цвет протоптанной земли (темный)
+  trampleSprite.alpha = 0.65; // Просвечивание
+
+  scene.trampleTexture = trampleTexture;
+  scene.trampleSprite = trampleSprite;
+  scene.staticLayer.addChild(trampleSprite);
+
   tempContainer.destroy({ children: true });
   scene.staticKey = staticKey;
 }
@@ -125,13 +152,70 @@ function updateSurfaceEntrances(scene: SurfaceScene, world: WorldSnapshot, cell:
   scene.entranceKey = entranceKey;
 }
 
+function updateTrample(scene: SurfaceScene, renderer: Renderer, world: WorldSnapshot): void {
+  if (!scene.trampleTexture || !scene.trampleSprite) {
+    return;
+  }
+
+  if (!scene.trailPainter) {
+    scene.trailPainter = new Graphics();
+  }
+
+  const trailPainter = scene.trailPainter;
+  trailPainter.clear();
+
+  let hasSurfaceEntities = false;
+
+  const ants = world.ants ?? [];
+  for (let i = 0; i < ants.length; i++) {
+    const ant = ants[i];
+    if (ant.layer === "surface") {
+      hasSurfaceEntities = true;
+      trailPainter.circle(ant.pos.x, ant.pos.y, 0.9).fill({ color: 0xffffff, alpha: 0.08 });
+    }
+  }
+
+  const enemies = world.enemies ?? [];
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    hasSurfaceEntities = true;
+    trailPainter.circle(enemy.pos.x, enemy.pos.y, 1.8).fill({ color: 0xffffff, alpha: 0.12 });
+  }
+
+  if (hasSurfaceEntities) {
+    renderer.render({
+      container: trailPainter,
+      target: scene.trampleTexture,
+      clear: false
+    });
+  }
+
+  // Медленное затухание следов (зарастание травой)
+  if (world.tick % 2 === 0) {
+    if (!scene.eraserGraphics) {
+      scene.eraserGraphics = new Graphics();
+      scene.eraserGraphics
+        .rect(0, 0, world.surface.width, world.surface.height)
+        .fill({ color: 0xffffff, alpha: 0.005 });
+      scene.eraserGraphics.blendMode = "erase";
+    }
+
+    renderer.render({
+      container: scene.eraserGraphics,
+      target: scene.trampleTexture,
+      clear: false
+    });
+  }
+}
+
 export function renderSurface(
   scene: SurfaceScene,
   renderer: Renderer,
   world: WorldSnapshot,
   viewportWidth: number,
   viewportHeight: number,
-  camera: Camera
+  camera: Camera,
+  trampleEnabled = true
 ): void {
   scene.root.scale.set(camera.zoom);
   scene.root.x = Math.round(viewportWidth * 0.5 - camera.x * SURFACE_TILE_SIZE * camera.zoom);
@@ -145,6 +229,14 @@ export function renderSurface(
   ].join(":");
   if (scene.staticKey !== staticKey) {
     rebuildSurfaceStatic(scene, renderer, world, cell, staticKey);
+  }
+
+  if (scene.trampleSprite) {
+    scene.trampleSprite.visible = trampleEnabled;
+  }
+
+  if (trampleEnabled) {
+    updateTrample(scene, renderer, world);
   }
 
   const dirtMounds = world.colonies?.map((c) => Math.floor((c.underground?.dirtMound ?? 0) / 30)) ?? [Math.floor((world.underground.dirtMound ?? 0) / 30)];
