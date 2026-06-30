@@ -217,6 +217,18 @@ export function stepUnderground(world: World, ant: Ant): void {
     }
   }
 
+  const hasPendingDig = world.underground.digTasks.some((task) => task.status !== "done");
+  if (
+    hasPendingDig &&
+    ant.preferredTask === "dig" &&
+    !ant.forageRole &&
+    ant.carrying <= 0 &&
+    (ant.state === "toEntrance" || ant.state === "search")
+  ) {
+    ant.state = "idle";
+    ant.job = "idle";
+  }
+
   if (ant.state === "carryBrood") {
     moveCarryingBrood(world, ant);
     return;
@@ -297,6 +309,18 @@ export function stepUnderground(world: World, ant: Ant): void {
   }
 
   if (assignDigTask(world, ant)) {
+    return;
+  }
+
+  if (hasPendingDig && ant.preferredTask === "dig" && ant.carrying <= 0) {
+    if ((ant.dirtLoad ?? 0) > 0) {
+      ant.carryingDirt = true;
+      ant.state = "carryDirt";
+      ant.job = "carryDirt";
+      moveDigging(world, ant);
+      return;
+    }
+    restUnderground(world, ant);
     return;
   }
 

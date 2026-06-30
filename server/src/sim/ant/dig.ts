@@ -4,7 +4,7 @@ import { bumpUndergroundGridVersion, completeDigTile, findDigTarget } from "../u
 import type { World } from "../world";
 import { isWithinRadius, normalize } from "./utils";
 import { moveUndergroundToNode, moveUndergroundToward } from "./movement";
-import { activeDigLaborCount, countUndergroundDiggers } from "./colony-state";
+import { activeDigLaborCount } from "./colony-state";
 
 export function needsSurfaceDiggerReturn(world: World): boolean {
   const hasDigNeed = world.underground.digTasks.some((task) => task.status !== "done");
@@ -13,6 +13,20 @@ export function needsSurfaceDiggerReturn(world: World): boolean {
 
 export function assignedDigTargets(world: World, ant: Ant): Set<string> {
   return new Set();
+}
+
+function currentUndergroundDiggers(world: World): number {
+  let count = 0;
+  for (const ant of world.ants) {
+    if (
+      ant.layer === "underground" &&
+      ant.state !== "dead" &&
+      (ant.state === "dig" || ant.state === "carryDirt" || ant.carryingDirt)
+    ) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 export function clearDigAssignment(ant: Ant): void {
@@ -112,7 +126,7 @@ export function assignDigTask(world: World, ant: Ant): boolean {
     return false;
   }
 
-  const activeDiggers = countUndergroundDiggers(world);
+  const activeDiggers = currentUndergroundDiggers(world);
   if (activeDiggers >= world.directives.diggerTarget) {
     return false;
   }

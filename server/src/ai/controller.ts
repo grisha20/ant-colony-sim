@@ -66,12 +66,17 @@ export function computeDirectives(world: World, genome: Genome): ColonyDirective
     Math.min(CONFIG.maxDirectiveNurses, nurseTarget)
   );
   const hasDigNeed = world.underground.digTasks.some((task) => task.status !== "done");
-  const diggersWhenFoodKnown = hasKnownFoodTarget ? 1 : CONFIG.startingMiners;
+  const hasCriticalDigNeed = world.underground.digTasks.some(
+    (task) =>
+      task.status !== "done" &&
+      (task.roomType === "egg" || task.roomType === "nursery" || task.roomType === "storage")
+  );
+  const diggersWhenFoodKnown = hasKnownFoodTarget && !hasCriticalDigNeed ? 1 : CONFIG.startingMiners;
   const minDiggersWhenNeeded = hasDigNeed ? Math.min(diggersWhenFoodKnown, workerCount) : 0;
   const diggerTarget = clamp(
     Math.max(minDiggersWhenNeeded, Math.round(workerCount * genome.genes.digFraction)),
     0,
-    hasKnownFoodTarget ? Math.min(1, CONFIG.maxDiggers) : CONFIG.maxDiggers
+    hasKnownFoodTarget && !hasCriticalDigNeed ? Math.min(1, CONFIG.maxDiggers) : CONFIG.maxDiggers
   );
   const queenRearThreshold = clamp(85 - genome.genes.queenRearBias * 50, 35, 85);
 
