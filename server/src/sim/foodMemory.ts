@@ -130,7 +130,7 @@ export function assignForageRoles(world: World): void {
   const digReserve = shouldReserveDiggers ? Math.min(world.directives.diggerTarget, CONFIG.startingMiners, Math.max(0, availableWorkers - scoutLimit - reserveTarget)) : 0;
   const foragerLimit = hasActiveTarget
     ? Math.max(0, Math.min(CONFIG.maxForagers, availableWorkers - scoutLimit - reserveTarget - digReserve))
-    : Math.max(0, Math.min(CONFIG.maxSearchAssistants, availableWorkers - scoutLimit));
+    : Math.max(0, Math.min(CONFIG.maxSearchAssistants, availableWorkers - scoutLimit - digReserve));
   const regularCandidates = world.ants
     .filter((ant) =>
       ant.state !== "dead" &&

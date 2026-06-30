@@ -42,6 +42,30 @@ function foodPriority(source: SurfaceFoodTarget["source"], starving: boolean): n
   return starving ? 0.55 : 0.18;
 }
 
+function shouldReturnToNestDuringSearch(world: World, ant: Ant): boolean {
+  if (ant.carrying > 0) {
+    return false;
+  }
+
+  const seed = numericAntId(ant.id) + (ant.colonyId === "colony-2" ? 23 : 0);
+  const distFromEntrance = distance(ant.pos, world.surface.entrance);
+  const searchTicks = 620 + (seed % 360);
+  const checkTicks = 150 + ((seed * 7) % 120);
+  const phase = (world.tick + seed * 41) % (searchTicks + checkTicks);
+  const nearEdge =
+    ant.pos.x < 10 ||
+    ant.pos.x > world.surface.width - 10 ||
+    ant.pos.y < 10 ||
+    ant.pos.y > world.surface.height - 10;
+  const farRadius = Math.min(world.surface.width, world.surface.height) * 0.34 + (seed % 22);
+
+  return (
+    (phase >= searchTicks && distFromEntrance > 9) ||
+    (nearEdge && distFromEntrance > 35) ||
+    distFromEntrance > farRadius
+  );
+}
+
 export function scoutDirection(world: World, ant: Ant): Vec2 {
   const seed = numericAntId(ant.id) + (ant.colonyId === "colony-2" ? 19 : 0);
   const sectorAngle = (seed * 2.399963229728653) % (Math.PI * 2);
@@ -53,11 +77,11 @@ export function scoutDirection(world: World, ant: Ant): Vec2 {
     x: Math.cos(world.tick * 0.023 + seed * 0.71),
     y: Math.sin(world.tick * 0.017 + seed * 1.13)
   };
-  let home = { x: 0, y: 0 };
-  const farRadius = Math.min(world.surface.width, world.surface.height) * 0.42;
-  if (currentRadius > farRadius) {
-    const pull = Math.min(1.5, (currentRadius - farRadius) / 35);
-    home = { x: -radial.x * pull, y: -radial.y * pull };
+  if (shouldReturnToNestDuringSearch(world, ant)) {
+    return normalize({
+      x: world.surface.entrance.x - ant.pos.x + wave.x * 4,
+      y: world.surface.entrance.y - ant.pos.y + wave.y * 4
+    });
   }
   const edgeMargin = 8;
   const edge = {
@@ -66,8 +90,8 @@ export function scoutDirection(world: World, ant: Ant): Vec2 {
   };
   const outwardWeight = currentRadius < 10 ? 1.8 : 0.65;
   return normalize({
-    x: sector.x * 1.1 + radial.x * outwardWeight + wave.x * 0.55 + home.x + edge.x * 1.4,
-    y: sector.y * 1.1 + radial.y * outwardWeight + wave.y * 0.55 + home.y + edge.y * 1.4
+    x: sector.x * 1.1 + radial.x * outwardWeight + wave.x * 0.55 + edge.x * 1.4,
+    y: sector.y * 1.1 + radial.y * outwardWeight + wave.y * 0.55 + edge.y * 1.4
   });
 }
 
