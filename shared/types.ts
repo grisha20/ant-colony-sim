@@ -32,7 +32,7 @@ export type UndergroundTile = {
   digProgress?: number;
 };
 
-export type UndergroundRoomType = "queen" | "storage" | "egg" | "nursery" | "barracks";
+export type UndergroundRoomType = "queen" | "storage" | "egg" | "nursery" | "barracks" | "waiting";
 
 export type UndergroundRoom = {
   id: string;
@@ -81,6 +81,7 @@ export type Ant = {
   strength: number;
   job?: "forage" | "nurse" | "dig" | "carryDirt" | "idle";
   forageRole?: "scout" | "forager";
+  preferredTask?: "dig";
   layer: Layer;
   state: AntState;
   pos: Vec2;
@@ -96,6 +97,8 @@ export type Ant = {
   digProgress?: number;
   carryingDebris?: "pebble" | "leaf" | null;
   foundFoodSourceId?: string;
+  scoutTrail?: Vec2[];
+  foundFoodTrail?: Vec2[];
   surfaceExitCooldown?: number;
   undergroundExitCooldown?: number;
 };
@@ -143,7 +146,7 @@ export type Underground = {
 export type Colony = {
   id: string;
   foundedTick: number;
-  knownFood: { id: string; pos: Vec2; lastSeenTick: number }[];
+  knownFood: { id: string; pos: Vec2; lastSeenTick: number; trail?: Vec2[] }[];
   activeFoodTargetId?: string;
   food: number;
   population: {

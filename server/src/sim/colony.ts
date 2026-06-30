@@ -17,7 +17,7 @@ export function createColony(
     activeFoodTargetId: undefined,
     food: CONFIG.startingFoodStorage,
     population: {
-      workers: CONFIG.startingWorkers,
+      workers: CONFIG.startingWorkers + CONFIG.startingMiners,
       scouts: CONFIG.startingScouts,
       nurses: CONFIG.startingNurses,
       eggs: CONFIG.startingEggs,

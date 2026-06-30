@@ -12,12 +12,12 @@ export function broodTarget(world: World, brood: Brood): Vec2 {
     return world.underground.queenChamber;
   }
   if (brood.location === "egg") {
-    return world.underground.queenChamber;
+    return eggDropPos(world) ?? world.underground.queenChamber;
   }
-  return world.underground.nursery;
+  return nurseryDropPos(world) ?? world.underground.nursery;
 }
 
-export function hasDugRoom(world: World, type: "storage" | "nursery" | "queen" | "egg" | "barracks"): boolean {
+export function hasDugRoom(world: World, type: "storage" | "nursery" | "queen" | "egg" | "barracks" | "waiting"): boolean {
   return world.underground.rooms.some((room) => room.type === type);
 }
 

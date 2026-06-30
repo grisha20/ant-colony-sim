@@ -424,7 +424,7 @@ export function tryCrossLayer(world: World, ant: Ant): boolean {
     ant.state === "return" || ant.state === "carry" || ant.carrying > 0
       ? Math.max(CONFIG.entranceRadiusSurface + CONFIG.workerSurfaceSpeed * 3, 5.0)
       : CONFIG.entranceRadiusSurface;
-  if (ant.layer === "surface" && isWithinRadius(ant.pos, world.surface.entrance, surfaceEntryRadius)) {
+  if (ant.layer === "surface" && (ant.surfaceExitCooldown ?? 0) <= 0 && isWithinRadius(ant.pos, world.surface.entrance, surfaceEntryRadius)) {
     ant.layer = "underground";
     ant.state = ant.carrying > 0 ? "deposit" : "idle";
     ant.pos = { ...world.underground.entrance };

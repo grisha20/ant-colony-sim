@@ -44,12 +44,22 @@ function foodPriority(source: SurfaceFoodTarget["source"], starving: boolean): n
 
 export function scoutDirection(world: World, ant: Ant): Vec2 {
   const seed = numericAntId(ant.id) + (ant.colonyId === "colony-2" ? 19 : 0);
-  const angle = seed * 2.399963229728653 + Math.floor(world.tick / 900) * 0.65;
-  let direction = { x: Math.cos(angle), y: Math.sin(angle) };
+  const maxRadius = Math.hypot(world.surface.width, world.surface.height) * 0.45;
+  const desiredRadius = 5 + ((world.tick * 0.018 + seed * 8) % maxRadius);
+  const fromEntrance = { x: ant.pos.x - world.surface.entrance.x, y: ant.pos.y - world.surface.entrance.y };
+  const currentRadius = Math.max(0.01, Math.hypot(fromEntrance.x, fromEntrance.y));
+  const radial = { x: fromEntrance.x / currentRadius, y: fromEntrance.y / currentRadius };
+  const tangentSign = seed % 2 === 0 ? 1 : -1;
+  const tangent = { x: -radial.y * tangentSign, y: radial.x * tangentSign };
+  const radiusError = Math.max(-1.4, Math.min(1.4, (desiredRadius - currentRadius) / 7));
+  let direction = normalize({
+    x: tangent.x * 1.15 + radial.x * radiusError,
+    y: tangent.y * 1.15 + radial.y * radiusError
+  });
   const distFromEntrance = distance(ant.pos, world.surface.entrance);
-  if (distFromEntrance < CONFIG.antFoodSightRadius) {
+  if (distFromEntrance < 4) {
     const away = normalize({ x: ant.pos.x - world.surface.entrance.x, y: ant.pos.y - world.surface.entrance.y });
-    direction = normalize({ x: direction.x + away.x * 0.6, y: direction.y + away.y * 0.6 });
+    direction = normalize({ x: direction.x + away.x * 0.9, y: direction.y + away.y * 0.9 });
   }
   return direction;
 }
@@ -87,15 +97,16 @@ export function pickupFoodIfReached(world: World, ant: Ant, target: SurfaceFoodT
   source.amount = Math.max(0, source.amount - amount);
   ant.energy = CONFIG.maxEnergy;
   ant.carrying = amount;
-  if (ant.forageRole === "scout") {
+  if (ant.forageRole === "scout" || !world.colony.activeFoodTargetId) {
     ant.foundFoodSourceId = source.id;
+    ant.foundFoodTrail = [...(ant.scoutTrail ?? []), { ...source.pos }];
   }
   ant.state = "carry";
   return true;
 }
 
 export function moveHungryToFood(world: World, ant: Ant): boolean {
-  const food = nearestAvailableFood(world, ant);
+  const food = nearestVisibleFood(world, ant);
   if (!food) {
     return false;
   }
@@ -221,19 +232,34 @@ function moveSearchingLegacy(world: World, ant: Ant): void {
 }
 
 function nearestVisibleFood(world: World, ant: Ant): SurfaceFoodTarget | null {
-  const food = nearestAvailableFood(world, ant);
-  if (!food) {
-    return null;
+  let nearest: SurfaceFoodTarget | null = null;
+  let nearestScore = Number.POSITIVE_INFINITY;
+  const starving = isColonyStarving(world);
+  for (const list of [world.surface.foodSources, world.surface.carrion]) {
+    list.forEach((source, index) => {
+      if (source.amount <= 0) {
+        return;
+      }
+      const isSuper = source.kind === "spiderCarcass";
+      const sightRadius = isSuper ? CONFIG.superFoodSightRadius : CONFIG.antFoodSightRadius;
+      const sourceDistance = distance(ant.pos, source.pos);
+      if (sourceDistance > sightRadius) {
+        return;
+      }
+      const score = sourceDistance / Math.max(0.05, foodPriority(source, starving));
+      if (score < nearestScore) {
+        nearestScore = score;
+        nearest = { source, list, index };
+      }
+    });
   }
-
-  const isSuper = food.source.kind === "spiderCarcass";
-  const sightRadius = isSuper ? CONFIG.superFoodSightRadius : CONFIG.antFoodSightRadius;
-  return isWithinRadius(ant.pos, food.source.pos, sightRadius) ? food : null;
+  return nearest;
 }
 
 function moveScoutSearching(world: World, ant: Ant): void {
   const food = nearestVisibleFood(world, ant);
   if (food && pickupFoodIfReached(world, ant, food)) {
+    ant.foundFoodTrail = [...(ant.scoutTrail ?? []), { ...food.source.pos }];
     return;
   }
 
@@ -265,34 +291,22 @@ function moveScoutSearching(world: World, ant: Ant): void {
     ant.pos.y += finalDirection.y * speed;
     clampToSurface(ant, world);
   });
+  rememberScoutTrail(world, ant);
 }
 
 function moveAlongFoodTrail(world: World, ant: Ant, targetPos: Vec2, towardFood: boolean): void {
   const speed = surfaceMoveSpeed(world, ant);
-  const entrance = world.surface.entrance;
-  const route = {
-    x: targetPos.x - entrance.x,
-    y: targetPos.y - entrance.y
-  };
-  const routeLengthSq = Math.max(0.001, route.x * route.x + route.y * route.y);
-  const routeLength = Math.sqrt(routeLengthSq);
-  const routeDir = { x: route.x / routeLength, y: route.y / routeLength };
-  const normal = { x: -routeDir.y, y: routeDir.x };
-  const progress = Math.max(0, Math.min(1, ((ant.pos.x - entrance.x) * route.x + (ant.pos.y - entrance.y) * route.y) / routeLengthSq));
-  const lane = ((numericAntId(ant.id) % 5) - 2) * 0.22;
-  const center = {
-    x: entrance.x + route.x * progress + normal.x * lane,
-    y: entrance.y + route.y * progress + normal.y * lane
-  };
-  const forward = towardFood ? routeDir : { x: -routeDir.x, y: -routeDir.y };
+  const trail = activeTrailForTarget(world, targetPos);
+  const guide = trailGuide(ant.pos, trail, towardFood);
+  const forward = guide.forward;
   const lateral = {
-    x: center.x - ant.pos.x,
-    y: center.y - ant.pos.y
+    x: guide.center.x - ant.pos.x,
+    y: guide.center.y - ant.pos.y
   };
   const jitter = randomHeading();
   let desired = normalize({
-    x: forward.x * 1.45 + lateral.x * 0.26 + jitter.x * 0.035,
-    y: forward.y * 1.45 + lateral.y * 0.26 + jitter.y * 0.035
+    x: forward.x * 1.55 + lateral.x * 0.35 + jitter.x * 0.025,
+    y: forward.y * 1.55 + lateral.y * 0.35 + jitter.y * 0.025
   });
 
   if (!isColonyStarving(world)) {
@@ -312,12 +326,82 @@ function moveAlongFoodTrail(world: World, ant: Ant, targetPos: Vec2, towardFood:
   });
 }
 
+function rememberScoutTrail(world: World, ant: Ant): void {
+  if (ant.forageRole !== "scout" || ant.layer !== "surface" || ant.carrying > 0) {
+    return;
+  }
+  const trail = ant.scoutTrail ?? [{ ...world.surface.entrance }];
+  const last = trail[trail.length - 1];
+  if (!last || distance(last, ant.pos) >= 2.5) {
+    trail.push({ ...ant.pos });
+  }
+  ant.scoutTrail = trail.slice(-80);
+}
+
+function activeTrailForTarget(world: World, targetPos: Vec2): Vec2[] {
+  const known = world.colony.knownFood.find((food) => food.id === world.colony.activeFoodTargetId);
+  const trail = known?.trail && known.trail.length >= 2
+    ? known.trail
+    : [world.surface.entrance, targetPos];
+  return trail;
+}
+
+function trailGuide(pos: Vec2, trail: Vec2[], towardFood: boolean): { center: Vec2; forward: Vec2 } {
+  if (trail.length < 2) {
+    return { center: trail[0] ?? pos, forward: { x: 1, y: 0 } };
+  }
+
+  let best = {
+    progress: 0,
+    distanceSq: Number.POSITIVE_INFINITY,
+    center: trail[0]
+  };
+  let walked = 0;
+  const segments: Array<{ a: Vec2; b: Vec2; length: number; start: number }> = [];
+  for (let i = 0; i < trail.length - 1; i += 1) {
+    const a = trail[i];
+    const b = trail[i + 1];
+    const ab = { x: b.x - a.x, y: b.y - a.y };
+    const lenSq = Math.max(0.001, ab.x * ab.x + ab.y * ab.y);
+    const length = Math.sqrt(lenSq);
+    segments.push({ a, b, length, start: walked });
+    const t = Math.max(0, Math.min(1, ((pos.x - a.x) * ab.x + (pos.y - a.y) * ab.y) / lenSq));
+    const center = { x: a.x + ab.x * t, y: a.y + ab.y * t };
+    const dsq = (pos.x - center.x) ** 2 + (pos.y - center.y) ** 2;
+    if (dsq < best.distanceSq) {
+      best = { progress: walked + length * t, distanceSq: dsq, center };
+    }
+    walked += length;
+  }
+
+  const total = Math.max(0.001, walked);
+  const lookahead = 6;
+  const targetProgress = Math.max(0, Math.min(total, best.progress + (towardFood ? lookahead : -lookahead)));
+  const next = pointAtTrailProgress(segments, targetProgress);
+  return {
+    center: best.center,
+    forward: normalize({ x: next.x - pos.x, y: next.y - pos.y })
+  };
+}
+
+function pointAtTrailProgress(segments: Array<{ a: Vec2; b: Vec2; length: number; start: number }>, progress: number): Vec2 {
+  for (const segment of segments) {
+    if (progress <= segment.start + segment.length) {
+      const t = Math.max(0, Math.min(1, (progress - segment.start) / Math.max(0.001, segment.length)));
+      return {
+        x: segment.a.x + (segment.b.x - segment.a.x) * t,
+        y: segment.a.y + (segment.b.y - segment.a.y) * t
+      };
+    }
+  }
+  const last = segments[segments.length - 1];
+  return last?.b ?? { x: 0, y: 0 };
+}
+
 function moveForagerSearching(world: World, ant: Ant): void {
   const target = activeFoodTarget(world);
   if (!target) {
-    ant.state = "return";
-    moveSurfaceToward(world, ant, world.surface.entrance, !isColonyStarving(world), false);
-    tryCrossLayer(world, ant);
+    moveScoutSearching(world, ant);
     return;
   }
 

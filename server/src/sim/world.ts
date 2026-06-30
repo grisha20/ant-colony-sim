@@ -61,7 +61,7 @@ let nextAntId = 1;
 let nextFoodSourceId = 0;
 let nextCarrionId = 0;
 const MAX_SURFACE_DEBRIS = 80;
-const MAX_SNAPSHOT_STORAGE_ROOMS = 8;
+const MAX_SNAPSHOT_STORAGE_ROOMS = 15;
 const MAX_SURFACE_FOOD_SOURCES = 40;
 const FOOD_MERGE_RADIUS = 4;
 const LEGACY_ANT_CORPSE_AMOUNT = 16;
@@ -485,7 +485,7 @@ function makeDefaultDirectives(): ColonyDirectives {
     foragerTarget: CONFIG.minForagers,
     activeTarget: CONFIG.minForagers,
     nurseTarget: 0,
-    diggerTarget: Math.min(CONFIG.maxDiggers, Math.round(CONFIG.startingWorkers * 0.15)),
+    diggerTarget: Math.min(CONFIG.maxDiggers, CONFIG.startingMiners),
     queenRearThreshold: CONFIG.queenRearStressThreshold,
     aggression: 0.3
   };
@@ -509,13 +509,15 @@ export function createColonyRuntime(
     spiderGenomeState.generationsRun
   );
   const underground = createUnderground(id);
-  const ants = Array.from({ length: CONFIG.startingWorkers }, () => createWorkerAnt(underground.queenChamber, "underground", id));
+  const ants = Array.from({ length: CONFIG.startingWorkers + CONFIG.startingMiners }, () => createWorkerAnt(underground.queenChamber, "underground", id));
   for (let index = 0; index < ants.length; index += 1) {
     if (index < CONFIG.startingScouts) {
       ants[index].job = "forage";
       ants[index].forageRole = "scout";
     } else if (index < CONFIG.startingScouts + CONFIG.startingNurses) {
       ants[index].job = "nurse";
+    } else if (index >= CONFIG.startingWorkers) {
+      ants[index].preferredTask = "dig";
     }
   }
   underground.ants = ants.map((ant) => ant.id);

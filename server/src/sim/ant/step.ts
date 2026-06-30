@@ -54,7 +54,22 @@ export function restNodeForAnt(ant: Ant): UndergroundNode {
   return numericAntId(ant.id) % 2 === 0 ? "barracksA" : "barracksB";
 }
 
+function waitingRoomCenter(world: World): Vec2 | null {
+  const room = world.underground.rooms.find((item) => item.type === "waiting");
+  return room ? { x: room.x + room.width / 2, y: room.y + room.height / 2 } : null;
+}
+
 export function restTargetForAnt(world: World, ant: Ant, node: UndergroundNode): Vec2 {
+  const waiting = waitingRoomCenter(world);
+  if (waiting && ant.job !== "nurse") {
+    const seed = numericAntId(ant.id);
+    const angle = seed * 2.399963229728653;
+    const radius = 0.8 + (seed % 4) * 0.35;
+    return {
+      x: Math.max(0, Math.min(world.underground.width - 0.01, waiting.x + Math.cos(angle) * radius)),
+      y: Math.max(0, Math.min(world.underground.height - 0.01, waiting.y + Math.sin(angle) * radius))
+    };
+  }
   const base = node === "barracksA" ? world.underground.barracksA : world.underground.barracksB;
   const seed = numericAntId(ant.id);
   const angle = seed * 2.399963229728653;
@@ -79,6 +94,12 @@ export function restUnderground(world: World, ant: Ant): void {
   }
 
   const nodePos = node === "barracksA" ? world.underground.barracksA : world.underground.barracksB;
+  const waiting = waitingRoomCenter(world);
+  if (waiting) {
+    moveUndergroundToward(world, ant, target, CONFIG.workerUndergroundSpeed * 0.5);
+    clampToUnderground(ant, world);
+    return;
+  }
   if (isWithinRadius(ant.pos, nodePos, CONFIG.undergroundNodeRadius)) {
     moveUndergroundToward(world, ant, target, CONFIG.workerUndergroundSpeed * 0.35);
     clampToUnderground(ant, world);
@@ -121,7 +142,9 @@ function isSurfaceExitThreatened(world: World): boolean {
 }
 
 function shouldWaitForExitSlot(world: World, ant: Ant): boolean {
-  const maxConcurrentExits = Math.max(1, Math.min(3, Math.ceil(world.directives.activeTarget / 4)));
+  const maxConcurrentExits = world.colony.activeFoodTargetId
+    ? Math.max(3, Math.min(12, Math.ceil(world.directives.activeTarget / 2)))
+    : Math.max(1, Math.min(3, Math.ceil(world.directives.activeTarget / 4)));
   const exiting = tickCache.undergroundExitingAnts;
 
   if (exiting.length < maxConcurrentExits) {
@@ -141,6 +164,9 @@ export function stepUnderground(world: World, ant: Ant): void {
 
   if ((ant.undergroundExitCooldown ?? 0) > 0) {
     ant.undergroundExitCooldown = Math.max(0, (ant.undergroundExitCooldown ?? 0) - 1);
+    if ((ant.forageRole === "scout" || ant.forageRole === "forager") && ant.state === "idle") {
+      return;
+    }
   }
 
   if (!isDugPos(world, ant.pos)) {
@@ -176,6 +202,15 @@ export function stepUnderground(world: World, ant: Ant): void {
     return;
   }
 
+  if (world.colony.activeFoodTargetId && ant.state === "dig" && !ant.carryingDirt) {
+    ant.state = "idle";
+    ant.job = ant.forageRole === "forager" || ant.forageRole === "scout" ? "forage" : "idle";
+    ant.digTaskId = undefined;
+    ant.digTarget = undefined;
+    ant.digStandPos = undefined;
+    ant.digProgress = undefined;
+  }
+
   if (ant.state === "dig" || ant.state === "carryDirt" || ant.carryingDirt) {
     if (moveDigging(world, ant)) {
       return;
@@ -196,6 +231,10 @@ export function stepUnderground(world: World, ant: Ant): void {
 
   if (ant.state === "toEntrance") {
     if (isSurfaceExitThreatened(world) || (ant.undergroundExitCooldown ?? 0) > 0 || shouldWaitForExitSlot(world, ant)) {
+      if (ant.forageRole === "scout" || ant.forageRole === "forager") {
+        ant.job = "forage";
+        return;
+      }
       ant.state = "idle";
       ant.job = "idle";
       restUnderground(world, ant);
@@ -220,8 +259,11 @@ export function stepUnderground(world: World, ant: Ant): void {
       restUnderground(world, ant);
       return;
     }
-    if (isSurfaceExitThreatened(world) || (ant.undergroundExitCooldown ?? 0) > 0 || shouldWaitForExitSlot(world, ant)) {
-      restUnderground(world, ant);
+    if ((ant.undergroundExitCooldown ?? 0) > 0) {
+      return;
+    }
+    if (isSurfaceExitThreatened(world) || shouldWaitForExitSlot(world, ant)) {
+      ant.state = "toEntrance";
       return;
     }
     ant.job = "forage";
@@ -236,8 +278,11 @@ export function stepUnderground(world: World, ant: Ant): void {
       restUnderground(world, ant);
       return;
     }
-    if (isSurfaceExitThreatened(world) || (ant.undergroundExitCooldown ?? 0) > 0 || shouldWaitForExitSlot(world, ant)) {
-      restUnderground(world, ant);
+    if ((ant.undergroundExitCooldown ?? 0) > 0) {
+      return;
+    }
+    if (isSurfaceExitThreatened(world) || shouldWaitForExitSlot(world, ant)) {
+      ant.state = "toEntrance";
       return;
     }
     ant.job = "forage";
@@ -281,6 +326,15 @@ export function stepUnderground(world: World, ant: Ant): void {
 }
 
 export function stepSurface(world: World, ant: Ant): void {
+  if (
+    (ant.forageRole === "scout" || (ant.forageRole === "forager" && !!world.colony.activeFoodTargetId)) &&
+    ant.state === "return" &&
+    ant.carrying <= 0 &&
+    ant.energy >= CONFIG.lowEnergyThreshold
+  ) {
+    ant.state = "search";
+  }
+
   if ((ant.state === "return" || ant.state === "carry" || ant.carrying > 0) && tryCrossLayer(world, ant)) {
     return;
   }
@@ -317,31 +371,33 @@ export function stepSurface(world: World, ant: Ant): void {
     return;
   }
 
-  if (ant.carrying <= 0 && needsSurfaceDiggerReturn(world)) {
+  if (!ant.forageRole && ant.carrying <= 0 && needsSurfaceDiggerReturn(world)) {
     moveDiggerHome(world, ant);
     return;
   }
 
-  if (ant.carrying <= 0 && needsSurfaceNurseReturn(world)) {
+  if (!ant.forageRole && ant.carrying <= 0 && needsSurfaceNurseReturn(world)) {
     moveNurseHome(world, ant);
     return;
   }
 
-  if (ant.state === "return" || ((ant.surfaceExitCooldown ?? 0) <= 0 && shouldReturnFromSurface(world, ant))) {
+  if (ant.state === "return" || (ant.forageRole !== "scout" && (ant.surfaceExitCooldown ?? 0) <= 0 && shouldReturnFromSurface(world, ant))) {
     moveHungryHome(world, ant);
     return;
   }
+
+  const refuelThreshold = ant.forageRole === "scout" ? CONFIG.lowEnergyThreshold : world.directives.refuelThreshold;
 
   if (ant.energy < CONFIG.lowEnergyThreshold && canUseStorageMeal(world, true)) {
     moveHungryHome(world, ant);
     return;
   }
 
-  if (ant.energy < world.directives.refuelThreshold && moveHungryToFood(world, ant)) {
+  if (ant.energy < refuelThreshold && moveHungryToFood(world, ant)) {
     return;
   }
 
-  if (ant.energy < world.directives.refuelThreshold && canUseStorageMeal(world)) {
+  if (ant.energy < refuelThreshold && canUseStorageMeal(world)) {
     moveHungryHome(world, ant);
     return;
   }

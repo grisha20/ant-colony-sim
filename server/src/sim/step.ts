@@ -7,7 +7,7 @@ import { profiler } from "../utils/profiler";
 import { updateBrood, updateQueen } from "./brood";
 import { updateEnemies } from "./enemy";
 import { assignForageRoles, updateColonyFoodMemory } from "./foodMemory";
-import { planEggRoomIfNeeded, planNurseryIfNeeded, refreshDigTasks } from "./underground";
+import { planEggRoomIfNeeded, planNurseryIfNeeded, planWaitingRoomIfNeeded, refreshDigTasks } from "./underground";
 import {
   addAntCorpse,
   colonyWorldView,
@@ -197,6 +197,7 @@ export function step(world: World): void {
       if (colony.underground.brood.some((brood) => brood.stage === "egg" && brood.location === "egg")) {
         planNurseryIfNeeded(colony.underground);
       }
+      planWaitingRoomIfNeeded(colony.underground, !!colony.colony.activeFoodTargetId && colony.ants.length > CONFIG.startingWorkers);
       refreshDigTasks(colony.underground);
       if (world.tick % 10 === 0) {
         updateColonyFoodMemory(scopedWorld);
