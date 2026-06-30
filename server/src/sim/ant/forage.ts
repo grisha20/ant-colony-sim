@@ -51,18 +51,25 @@ function shouldReturnToNestDuringSearch(world: World, ant: Ant): boolean {
   const distFromEntrance = distance(ant.pos, world.surface.entrance);
   const searchTicks = 620 + (seed % 360);
   const checkTicks = 150 + ((seed * 7) % 120);
-  const phase = (world.tick + seed * 41) % (searchTicks + checkTicks);
+  const cycleTicks = searchTicks + checkTicks;
+  const shiftedTick = world.tick + seed * 41;
+  const phase = shiftedTick % cycleTicks;
+  const cycle = Math.floor(shiftedTick / cycleTicks);
   const nearEdge =
     ant.pos.x < 10 ||
     ant.pos.x > world.surface.width - 10 ||
     ant.pos.y < 10 ||
     ant.pos.y > world.surface.height - 10;
-  const farRadius = Math.min(world.surface.width, world.surface.height) * 0.34 + (seed % 22);
+  const maxReach = Math.hypot(world.surface.width, world.surface.height) * 0.55;
+  const excursionLimit = Math.min(
+    maxReach,
+    70 + (seed % 35) + (cycle % 7) * 34 + Math.min(90, world.tick * 0.012)
+  );
 
   return (
     (phase >= searchTicks && distFromEntrance > 9) ||
     (nearEdge && distFromEntrance > 35) ||
-    distFromEntrance > farRadius
+    distFromEntrance > excursionLimit
   );
 }
 
@@ -89,9 +96,11 @@ export function scoutDirection(world: World, ant: Ant): Vec2 {
     y: ant.pos.y < edgeMargin ? 1 : ant.pos.y > world.surface.height - edgeMargin ? -1 : 0
   };
   const outwardWeight = currentRadius < 10 ? 1.8 : 0.65;
+  const lateralSign = seed % 2 === 0 ? 1 : -1;
+  const lateral = { x: -radial.y * lateralSign, y: radial.x * lateralSign };
   return normalize({
-    x: sector.x * 1.1 + radial.x * outwardWeight + wave.x * 0.55 + edge.x * 1.4,
-    y: sector.y * 1.1 + radial.y * outwardWeight + wave.y * 0.55 + edge.y * 1.4
+    x: sector.x * 1.05 + radial.x * outwardWeight + lateral.x * 0.18 + wave.x * 0.7 + edge.x * 1.4,
+    y: sector.y * 1.05 + radial.y * outwardWeight + lateral.y * 0.18 + wave.y * 0.7 + edge.y * 1.4
   });
 }
 
