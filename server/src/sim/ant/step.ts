@@ -144,7 +144,7 @@ function isSurfaceExitThreatened(world: World): boolean {
 function shouldWaitForExitSlot(world: World, ant: Ant): boolean {
   const maxConcurrentExits = world.colony.activeFoodTargetId
     ? Math.max(3, Math.min(12, Math.ceil(world.directives.activeTarget / 2)))
-    : Math.max(1, Math.min(3, Math.ceil(world.directives.activeTarget / 4)));
+    : Math.max(3, Math.min(12, Math.ceil(world.directives.activeTarget / 2)));
   const exiting = tickCache.undergroundExitingAnts;
 
   if (exiting.length < maxConcurrentExits) {

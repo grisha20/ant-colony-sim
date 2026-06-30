@@ -26,7 +26,12 @@ export function isColonyStarving(world: World): boolean {
 }
 
 export function isColonyWarHungry(world: World): boolean {
-  return surfaceFoodTotal(world) <= CONFIG.starveFoodThreshold && world.underground.foodStorage <= CONFIG.warHungerThreshold;
+  const noKnownFood = !world.colony.activeFoodTargetId && world.colony.knownFood.length === 0;
+  return (
+    surfaceFoodTotal(world) <= CONFIG.starveFoodThreshold ||
+    (noKnownFood && world.underground.foodStorage <= CONFIG.warHungerThreshold) ||
+    world.underground.queen.starve > 0
+  ) && world.underground.foodStorage <= CONFIG.warHungerThreshold;
 }
 
 export function hasAvailableSurfaceFood(world: World): boolean {

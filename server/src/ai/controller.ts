@@ -49,10 +49,11 @@ export function computeDirectives(world: World, genome: Genome): ColonyDirective
     return isWithinRadius(enemy.pos, world.surface.entrance, CONFIG.spiderNearNestRadius);
   });
   const nurseTarget = hasBrood ? Math.min(CONFIG.maxNurses, workerCount) : 0;
+  const availableForSearch = Math.max(1, workerCount - nurseTarget);
   const rawActiveTarget = hasKnownFoodTarget
     ? Math.max(CONFIG.minForagers, Math.round(workerCount * CONFIG.foragerFraction))
-    : Math.min(CONFIG.maxScouts, Math.max(CONFIG.startingScouts, Math.round(workerCount * CONFIG.scoutFraction)));
-  const maxActiveForagers = hasKnownFoodTarget ? CONFIG.maxForagers : CONFIG.maxScouts;
+    : availableForSearch;
+  const maxActiveForagers = hasKnownFoodTarget ? CONFIG.maxForagers : CONFIG.maxSearchAssistants;
   const minActiveForagers = hasKnownFoodTarget ? CONFIG.minForagers : Math.min(CONFIG.startingScouts, workerCount);
   const activeTarget = clamp(
     Math.round(rawActiveTarget * (spiderNearNest ? CONFIG.spiderNearNestPenalty : 1)),
@@ -103,7 +104,9 @@ export function computeDirectives(world: World, genome: Genome): ColonyDirective
     diggerTarget,
     queenRearThreshold,
     aggression: clamp(
-      genome.genes.aggression,
+      genome.genes.aggression +
+        (!hasKnownFoodTarget && world.underground.foodStorage <= CONFIG.warHungerThreshold ? 0.35 : 0) +
+        (world.underground.queen.starve > 0 ? Math.min(0.3, world.underground.queen.starve * 0.04) : 0),
       CONFIG.genomeGeneBounds.aggression.min,
       CONFIG.genomeGeneBounds.aggression.max
     )

@@ -99,6 +99,7 @@ export type Ant = {
   foundFoodSourceId?: string;
   scoutTrail?: Vec2[];
   foundFoodTrail?: Vec2[];
+  knownActiveFoodTargetId?: string;
   surfaceExitCooldown?: number;
   undergroundExitCooldown?: number;
 };

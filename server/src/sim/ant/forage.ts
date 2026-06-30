@@ -44,24 +44,31 @@ function foodPriority(source: SurfaceFoodTarget["source"], starving: boolean): n
 
 export function scoutDirection(world: World, ant: Ant): Vec2 {
   const seed = numericAntId(ant.id) + (ant.colonyId === "colony-2" ? 19 : 0);
-  const maxRadius = Math.hypot(world.surface.width, world.surface.height) * 0.45;
-  const desiredRadius = 5 + ((world.tick * 0.018 + seed * 8) % maxRadius);
+  const sectorAngle = (seed * 2.399963229728653) % (Math.PI * 2);
+  const sector = { x: Math.cos(sectorAngle), y: Math.sin(sectorAngle) };
   const fromEntrance = { x: ant.pos.x - world.surface.entrance.x, y: ant.pos.y - world.surface.entrance.y };
   const currentRadius = Math.max(0.01, Math.hypot(fromEntrance.x, fromEntrance.y));
   const radial = { x: fromEntrance.x / currentRadius, y: fromEntrance.y / currentRadius };
-  const tangentSign = seed % 2 === 0 ? 1 : -1;
-  const tangent = { x: -radial.y * tangentSign, y: radial.x * tangentSign };
-  const radiusError = Math.max(-1.4, Math.min(1.4, (desiredRadius - currentRadius) / 7));
-  let direction = normalize({
-    x: tangent.x * 1.15 + radial.x * radiusError,
-    y: tangent.y * 1.15 + radial.y * radiusError
-  });
-  const distFromEntrance = distance(ant.pos, world.surface.entrance);
-  if (distFromEntrance < 4) {
-    const away = normalize({ x: ant.pos.x - world.surface.entrance.x, y: ant.pos.y - world.surface.entrance.y });
-    direction = normalize({ x: direction.x + away.x * 0.9, y: direction.y + away.y * 0.9 });
+  const wave = {
+    x: Math.cos(world.tick * 0.023 + seed * 0.71),
+    y: Math.sin(world.tick * 0.017 + seed * 1.13)
+  };
+  let home = { x: 0, y: 0 };
+  const farRadius = Math.min(world.surface.width, world.surface.height) * 0.42;
+  if (currentRadius > farRadius) {
+    const pull = Math.min(1.5, (currentRadius - farRadius) / 35);
+    home = { x: -radial.x * pull, y: -radial.y * pull };
   }
-  return direction;
+  const edgeMargin = 8;
+  const edge = {
+    x: ant.pos.x < edgeMargin ? 1 : ant.pos.x > world.surface.width - edgeMargin ? -1 : 0,
+    y: ant.pos.y < edgeMargin ? 1 : ant.pos.y > world.surface.height - edgeMargin ? -1 : 0
+  };
+  const outwardWeight = currentRadius < 10 ? 1.8 : 0.65;
+  return normalize({
+    x: sector.x * 1.1 + radial.x * outwardWeight + wave.x * 0.55 + home.x + edge.x * 1.4,
+    y: sector.y * 1.1 + radial.y * outwardWeight + wave.y * 0.55 + home.y + edge.y * 1.4
+  });
 }
 
 export function nearestAvailableFood(world: World, ant: Ant): SurfaceFoodTarget | null {
@@ -97,7 +104,11 @@ export function pickupFoodIfReached(world: World, ant: Ant, target: SurfaceFoodT
   source.amount = Math.max(0, source.amount - amount);
   ant.energy = CONFIG.maxEnergy;
   ant.carrying = amount;
-  if (ant.forageRole === "scout" || !world.colony.activeFoodTargetId) {
+  if (
+    ant.forageRole === "scout" ||
+    !world.colony.activeFoodTargetId ||
+    ant.knownActiveFoodTargetId !== world.colony.activeFoodTargetId
+  ) {
     ant.foundFoodSourceId = source.id;
     ant.foundFoodTrail = [...(ant.scoutTrail ?? []), { ...source.pos }];
   }
@@ -403,6 +414,14 @@ function moveForagerSearching(world: World, ant: Ant): void {
   if (!target) {
     moveScoutSearching(world, ant);
     return;
+  }
+  if (ant.knownActiveFoodTargetId !== target.source.id) {
+    if (distance(ant.pos, world.surface.entrance) <= 8 || ant.state === "return") {
+      ant.knownActiveFoodTargetId = target.source.id;
+    } else {
+      moveScoutSearching(world, ant);
+      return;
+    }
   }
 
   if (pickupFoodIfReached(world, ant, target)) {

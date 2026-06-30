@@ -107,7 +107,7 @@ export const CONFIG = {
   foragerFraction: 0.9,
   maxForagers: 260,
   scoutCount: 4,
-  maxSearchAssistants: 50,
+  maxSearchAssistants: 260,
   spiderNearNestPenalty: 0.55,
   spiderNearNestRadius: 18,
 
